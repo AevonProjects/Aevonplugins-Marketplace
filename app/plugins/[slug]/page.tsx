@@ -54,6 +54,8 @@ export default function PluginDetailPage() {
   const [signedIn, setSignedIn] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadPlugin() {
@@ -118,6 +120,33 @@ export default function PluginDetailPage() {
 
     loadPlugin();
   }, [slug]);
+
+
+  async function authToken() {
+    if (!supabase) return null;
+    const { data } = await supabase.auth.getSession();
+    return data.session?.access_token ?? null;
+  }
+
+  async function claimFree() {
+    if (!plugin || !supabase) return;
+    setActionBusy(true); setActionMessage(null);
+    const token = await authToken();
+    const res = await fetch(`/api/plugins/${plugin.id}/claim`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+    const body = await res.json(); setActionBusy(false);
+    if (!res.ok) return setActionMessage(body.error || "Could not claim plugin.");
+    setActionMessage("Plugin added to your library."); window.location.reload();
+  }
+
+  async function downloadPlugin() {
+    if (!plugin || !supabase) return;
+    setActionBusy(true); setActionMessage(null);
+    const token = await authToken();
+    const res = await fetch(`/api/plugins/${plugin.id}/download`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+    const body = await res.json(); setActionBusy(false);
+    if (!res.ok) return setActionMessage(body.error || "Could not start download.");
+    window.location.href = body.url;
+  }
 
   if (loading) {
     return (
@@ -206,7 +235,7 @@ export default function PluginDetailPage() {
                 <strong>{price > 0 ? "Not purchased yet" : "Access not assigned yet"}</strong>
                 <p>{price > 0 ? "Secure checkout will be connected in the next marketplace stage." : "Free-plugin claiming will be connected in the next marketplace stage."}</p>
               </div>
-              <button className="primaryBtn" disabled>{price > 0 ? "Purchase Coming Soon" : "Claim Coming Soon"}</button>
+              {price > 0 ? <button className="primaryBtn" disabled>Purchase Coming Soon</button> : <button className="primaryBtn" onClick={claimFree} disabled={actionBusy}>{actionBusy ? "Claiming…" : "Add to Library"}</button>}
             </div>
           )}
 
@@ -226,8 +255,9 @@ export default function PluginDetailPage() {
             </div>
           )}
 
-          <button className="downloadBtn" disabled>
-            <Download size={18} /> Download System Coming Next
+          {actionMessage && <p className="muted">{actionMessage}</p>}
+          <button className="downloadBtn" disabled={!owned || actionBusy} onClick={downloadPlugin}>
+            <Download size={18} /> {actionBusy ? "Please wait…" : owned ? "Download Plugin" : "Own this plugin to download"}
           </button>
         </section>
 

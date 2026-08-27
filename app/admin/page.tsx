@@ -11,6 +11,7 @@ import {
   RefreshCw,
   ShieldCheck,
   Trash2,
+  UploadCloud,
   XCircle,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -25,6 +26,9 @@ type PluginRow = {
   status: "draft" | "published" | string;
   created_at: string;
   updated_at: string;
+  file_name?: string | null;
+  file_path?: string | null;
+  file_size?: number | null;
 };
 
 type Notice = { type: "success" | "error" | "info"; text: string } | null;
@@ -73,7 +77,7 @@ export default function AdminPage() {
     setLoadingPlugins(true);
     const { data, error } = await supabase
       .from("plugins")
-      .select("id,name,slug,description,version,price,status,created_at,updated_at")
+      .select("id,name,slug,description,version,price,status,created_at,updated_at,file_name,file_path,file_size")
       .order("created_at", { ascending: false });
 
     setLoadingPlugins(false);
@@ -226,6 +230,21 @@ export default function AdminPage() {
     await loadPlugins();
   }
 
+
+  async function uploadPluginFile(plugin: PluginRow, file: File | null) {
+    if (!file || !supabase) return;
+    if (!file.name.toLowerCase().endsWith(".jar")) return setNotice({type:"error",text:"Please select a .jar plugin file."});
+    setNotice({type:"info",text:`Preparing upload for ${plugin.name}…`});
+    const {data:s}=await supabase.auth.getSession(); const token=s.session?.access_token;
+    const prep=await fetch(`/api/admin/plugins/${plugin.id}/upload-url`,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({fileName:file.name,fileSize:file.size})});
+    const pj=await prep.json(); if(!prep.ok)return setNotice({type:"error",text:pj.error||"Could not prepare upload."});
+    const up=await supabase.storage.from("plugin-files").uploadToSignedUrl(pj.path,pj.token,file,{contentType:"application/java-archive"});
+    if(up.error)return setNotice({type:"error",text:up.error.message});
+    const save=await fetch(`/api/admin/plugins/${plugin.id}/file`,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({path:pj.path,fileName:file.name,fileSize:file.size})});
+    const sj=await save.json(); if(!save.ok)return setNotice({type:"error",text:sj.error||"Upload metadata failed."});
+    setNotice({type:"success",text:`${file.name} uploaded for ${plugin.name}.`}); await loadPlugins();
+  }
+
   return (
     <div className="pageWrap adminWrap">
       <p className="eyebrow">ADMINISTRATION</p>
@@ -357,9 +376,14 @@ export default function AdminPage() {
                         <span>/{plugin.slug}</span>
                         <span>v{plugin.version || "—"}</span>
                         <span>{Number(plugin.price || 0) === 0 ? "Free" : `$${Number(plugin.price).toFixed(2)}`}</span>
+                        <span>{plugin.file_name ? `File: ${plugin.file_name}` : "No JAR uploaded"}</span>
                       </div>
                     </div>
                     <div className="adminPluginActions">
+                      <label className="secondaryBtn fileUploadBtn">
+                        <UploadCloud size={15} /> {plugin.file_name ? "Replace JAR" : "Upload JAR"}
+                        <input type="file" accept=".jar,application/java-archive" hidden onChange={(e)=>uploadPluginFile(plugin,e.target.files?.[0] ?? null)} />
+                      </label>
                       <button className="secondaryBtn" type="button" onClick={() => beginEdit(plugin)}>
                         <Edit3 size={15} /> Edit
                       </button>
