@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Search, Package, ArrowRight, Sparkles } from "lucide-react";
+import { Search, Package, ArrowRight, Sparkles, AlertTriangle } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 
 type PluginRow = {
@@ -14,44 +14,50 @@ type PluginRow = {
   status: string;
 };
 
-const demoPlugin: PluginRow = {
-  id: "demo-alicense",
-  name: "ALicense",
-  slug: "alicense",
-  description: "Advanced item licensing and ownership protection for Minecraft servers.",
-  version: "1.1.1",
-  price: 0,
-  status: "published"
-};
-
 export default function MarketplacePage() {
   const [plugins, setPlugins] = useState<PluginRow[]>([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
+      setLoading(true);
+      setLoadError(null);
+
       if (!supabase) {
-        setPlugins([demoPlugin]);
+        setPlugins([]);
+        setLoadError("Marketplace database is not configured.");
         setLoading(false);
         return;
       }
+
       const { data, error } = await supabase
         .from("plugins")
         .select("id,name,slug,description,version,price,status")
         .eq("status", "published")
         .order("created_at", { ascending: false });
-      if (error || !data?.length) setPlugins([demoPlugin]);
-      else setPlugins(data as PluginRow[]);
+
+      if (error) {
+        console.error("Failed to load marketplace plugins:", error);
+        setPlugins([]);
+        setLoadError("We couldn't load the marketplace right now. Please try again shortly.");
+      } else {
+        setPlugins((data ?? []) as PluginRow[]);
+      }
+
       setLoading(false);
     }
+
     load();
   }, []);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return plugins;
-    return plugins.filter(p => `${p.name} ${p.description ?? ""}`.toLowerCase().includes(q));
+    return plugins.filter((p) =>
+      `${p.name} ${p.description ?? ""}`.toLowerCase().includes(q)
+    );
   }, [plugins, query]);
 
   return (
@@ -79,7 +85,29 @@ export default function MarketplacePage() {
       </div>
 
       <section className="grid">
-        {loading ? <div className="emptyCard">Loading marketplace…</div> : filtered.map(plugin => (
+        {loading && <div className="emptyCard">Loading marketplace…</div>}
+
+        {!loading && loadError && (
+          <div className="emptyCard">
+            <AlertTriangle size={22} />
+            <div>
+              <strong>Marketplace unavailable</strong>
+              <p>{loadError}</p>
+            </div>
+          </div>
+        )}
+
+        {!loading && !loadError && filtered.length === 0 && (
+          <div className="emptyCard">
+            <Package size={22} />
+            <div>
+              <strong>{query.trim() ? "No matching plugins" : "No plugins available"}</strong>
+              <p>{query.trim() ? "Try another search term." : "There are currently no published plugins."}</p>
+            </div>
+          </div>
+        )}
+
+        {!loading && !loadError && filtered.map(plugin => (
           <article className="pluginCard" key={plugin.id}>
             <div className="pluginIcon"><Package size={28} /></div>
             <div className="pluginBody">
