@@ -1,22 +1,28 @@
 # Aevon Plugins Marketplace V2
 
-Next.js + Supabase marketplace starter for AevonProjects.
+Next.js + Supabase marketplace starter for Aevon plugins.
 
 ## Required Vercel environment variables
 
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 
-Both are browser-safe values when using Supabase's publishable key and proper RLS.
+## Admin dashboard update
 
-## Deploy
+The Admin Dashboard supports:
 
-1. Upload all files/folders in this project to the root of your GitHub repository.
-2. Commit to `main`.
-3. Vercel automatically redeploys the connected project.
-4. Open `/login` and sign in with the admin account created in Supabase.
-5. Open `/admin` to add the first published plugin.
+- Create plugin
+- Edit plugin
+- Publish / unpublish
+- Delete plugin (with confirmation)
+- Duplicate-slug error feedback
+- Success/error status messages
+- Refresh/list existing plugins
 
-## Important
+### Required one-time Supabase policy
 
-Never expose a Supabase `service_role` or `sb_secret_...` key in a `NEXT_PUBLIC_...` variable.
+Run the SQL in:
+
+`supabase/admin-plugin-select-policy.sql`
+
+This allows admins to see both draft and published plugins while normal visitors can still only see published listings.
