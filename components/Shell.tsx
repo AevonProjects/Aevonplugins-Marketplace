@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Box, Home, Library, KeyRound, ShieldCheck, LogIn } from "lucide-react";
+import { Home, Library, KeyRound, ShieldCheck, LogIn, Menu, X } from "lucide-react";
+import { useState } from "react";
 
 const links = [
   { href: "/", label: "Marketplace", icon: Home },
@@ -14,28 +15,51 @@ const links = [
 
 export default function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const [open, setOpen] = useState(false);
 
   return (
     <div className="shell">
-      <aside className="sidebar">
-        <div className="brand">
-          <div className="brandMark"><Box size={21} /></div>
-          <div>
-            <strong>Aevon</strong>
-            <span>Plugins Marketplace</span>
-          </div>
+      <header className="siteHeader">
+        <div className="siteHeaderInner">
+          <Link href="/" className="siteBrand" onClick={() => setOpen(false)}>
+            <img src="/assets/aevon-bird.png" alt="Aevon bird" className="siteBird" />
+            <div className="siteBrandWords">
+              <strong><span>AEVON</span>PLUGINS</strong>
+              <small>MARKETPLACE</small>
+            </div>
+          </Link>
+
+          <button className="mobileMenuBtn" onClick={() => setOpen(v => !v)} aria-label="Toggle navigation">
+            {open ? <X size={22} /> : <Menu size={22} />}
+          </button>
+
+          <nav className={open ? "siteNav open" : "siteNav"}>
+            {links.map(({ href, label, icon: Icon }) => (
+              <Link
+                key={href}
+                href={href}
+                onClick={() => setOpen(false)}
+                className={pathname === href ? "siteNavItem active" : "siteNavItem"}
+              >
+                <Icon size={16} />
+                <span>{label}</span>
+              </Link>
+            ))}
+          </nav>
         </div>
-        <nav>
-          {links.map(({ href, label, icon: Icon }) => (
-            <Link key={href} href={href} className={pathname === href ? "navItem active" : "navItem"}>
-              <Icon size={18} />
-              <span>{label}</span>
-            </Link>
-          ))}
-        </nav>
-        <div className="sidebarFoot">Aevon Marketplace V2</div>
-      </aside>
+      </header>
+
       <main className="main">{children}</main>
+
+      <footer className="siteFooter">
+        <div className="siteFooterInner">
+          <div className="footerBrand">
+            <img src="/assets/aevon-bird.png" alt="" />
+            <div><strong>Aevon Plugins Marketplace</strong><span>Premium tools for your Minecraft community.</span></div>
+          </div>
+          <span>© 2026 Aevon Projects</span>
+        </div>
+      </footer>
     </div>
   );
 }

@@ -26,3 +26,13 @@ Run the SQL in:
 `supabase/admin-plugin-select-policy.sql`
 
 This allows admins to see both draft and published plugins while normal visitors can still only see published listings.
+
+## Plugin Detail Update
+- Marketplace cards now link to `/plugins/[slug]`.
+- Detail pages load published plugin data directly from Supabase.
+- Logged-in users can see whether they own the plugin through `user_plugins`.
+- Existing license status, key, download count, and last download timestamp are displayed when available.
+- Purchase/claim and download actions intentionally remain disabled until the secure transaction/download backend is added.
+
+## Minecraft Storefront Redesign
+This build uses the supplied Aevon assets in `public/assets/` and adds a floating, scroll-snap plugin carousel with next/previous controls. Existing Supabase auth, admin management, RLS behavior, plugin detail pages, library, and licenses remain intact.
