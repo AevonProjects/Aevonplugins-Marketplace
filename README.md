@@ -55,3 +55,10 @@ Before public registration works:
 `SUPABASE_SERVICE_ROLE_KEY`, `REGISTRATION_IP_HASH_SECRET`, and `PROXYCHECK_API_KEY` must never be exposed as `NEXT_PUBLIC_` variables.
 
 One-account-per-IP is intentionally strict and can block multiple legitimate people sharing the same public IP (households, schools, cafes, carrier-grade NAT). VPN/proxy detection is reputation-based and cannot guarantee detection of every anonymizing connection.
+
+## Ownership + secure downloads
+1. Run `supabase/ownership-download.sql` once in Supabase SQL Editor.
+2. Admin Dashboard can upload/replace a plugin `.jar` directly to the private `plugin-files` bucket using a short-lived signed upload token.
+3. Free published plugins can be claimed into My Library and receive a license automatically.
+4. Downloads require ownership + an active license (admins may test downloads) and use a 60-second signed URL.
+5. Paid checkout is intentionally still disabled until a payment provider is connected.
