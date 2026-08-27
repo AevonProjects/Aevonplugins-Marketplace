@@ -49,9 +49,9 @@ This build adds:
 Before public registration works:
 1. Run `supabase/registration-security.sql` in the Supabase SQL Editor.
 2. In Supabase Authentication settings, keep **Confirm email** enabled and configure your production Site URL / redirect URL.
-3. Add these Vercel environment variables as server-only secrets: `SUPABASE_SERVICE_ROLE_KEY`, `IP_HASH_SECRET`, and `PROXYCHECK_API_KEY`.
+3. Add these Vercel environment variables as server-only secrets: `SUPABASE_SERVICE_ROLE_KEY`, `REGISTRATION_IP_HASH_SECRET`, and `PROXYCHECK_API_KEY`.
 4. Redeploy after adding environment variables.
 
-`SUPABASE_SERVICE_ROLE_KEY`, `IP_HASH_SECRET`, and `PROXYCHECK_API_KEY` must never be exposed as `NEXT_PUBLIC_` variables.
+`SUPABASE_SERVICE_ROLE_KEY`, `REGISTRATION_IP_HASH_SECRET`, and `PROXYCHECK_API_KEY` must never be exposed as `NEXT_PUBLIC_` variables.
 
 One-account-per-IP is intentionally strict and can block multiple legitimate people sharing the same public IP (households, schools, cafes, carrier-grade NAT). VPN/proxy detection is reputation-based and cannot guarantee detection of every anonymizing connection.

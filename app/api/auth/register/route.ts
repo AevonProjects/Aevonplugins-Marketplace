@@ -36,7 +36,7 @@ async function checkProxy(ip: string, apiKey: string) {
 export async function POST(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const hashSecret = process.env.IP_HASH_SECRET;
+  const hashSecret = process.env.REGISTRATION_IP_HASH_SECRET;
   const proxyCheckKey = process.env.PROXYCHECK_API_KEY;
 
   if (!supabaseUrl || !serviceRoleKey || !hashSecret || !proxyCheckKey) {
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
   const registrationHash = ipHash(ip, hashSecret);
 
   const { data: existing, error: lookupError } = await admin
-    .from("registration_ip_locks")
+    .from("registration_security")
     .select("id")
     .eq("ip_hash", registrationHash)
     .maybeSingle();
@@ -106,9 +106,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unable to create this account. If the email is already registered, use Login or Forgot Password." }, { status: 409 });
   }
 
-  const { error: lockError } = await admin.from("registration_ip_locks").insert({
+  const { error: lockError } = await admin.from("registration_security").insert({
     user_id: signup.user.id,
-    ip_hash: registrationHash
+    email,
+    ip_hash: registrationHash,
+    vpn_detected: false,
+    proxy_detected: false
   });
 
   if (lockError) {
