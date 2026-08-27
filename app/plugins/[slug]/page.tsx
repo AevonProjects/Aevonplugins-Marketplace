@@ -255,10 +255,29 @@ export default function PluginDetailPage() {
             </div>
           )}
 
-          {actionMessage && <p className="muted">{actionMessage}</p>}
-          <button className="downloadBtn" disabled={!owned || actionBusy} onClick={downloadPlugin}>
-            <Download size={18} /> {actionBusy ? "Please wait…" : owned ? "Download Plugin" : "Own this plugin to download"}
-          </button>
+          {actionMessage && <p className="muted actionMessage">{actionMessage}</p>}
+
+          {!signedIn ? (
+            <button className="pluginActionBtn lockedAction" disabled>
+              <LockKeyhole size={18} /> LOGIN / REGISTER TO DOWNLOAD
+            </button>
+          ) : owned ? (
+            <button className="pluginActionBtn ownedDownloadAction" disabled={actionBusy} onClick={downloadPlugin}>
+              <Download size={18} /> {actionBusy ? "PREPARING DOWNLOAD…" : "DOWNLOAD"}
+            </button>
+          ) : price > 0 ? (
+            <button
+              className="pluginActionBtn purchaseAction"
+              disabled={actionBusy}
+              onClick={() => setActionMessage("Secure checkout is the next marketplace step. Purchasing is not enabled yet.")}
+            >
+              <ShoppingCart size={18} /> PURCHASE PLUGIN
+            </button>
+          ) : (
+            <button className="pluginActionBtn purchaseAction" disabled={actionBusy} onClick={claimFree}>
+              <ShoppingCart size={18} /> {actionBusy ? "ADDING TO LIBRARY…" : "CLAIM FREE PLUGIN"}
+            </button>
+          )}
         </section>
 
         <aside className="detailPanel detailsAside">
