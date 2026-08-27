@@ -394,8 +394,9 @@ export default function PluginDetailPage() {
                     <div>
                       <span>GCash payment details</span>
                       {paymentConfig.gcashAccountName && <strong>{paymentConfig.gcashAccountName}</strong>}
-                      {paymentConfig.gcashNumber && <strong>{paymentConfig.gcashNumber}</strong>}
-                      <p>Pay the exact amount shown above before submitting your receipt for verification.</p>
+                      {paymentConfig.gcashNumber && <strong>GCash Mobile: {paymentConfig.gcashNumber}</strong>}
+                      <p>Scan the QR code and pay the exact amount shown above.</p>
+                      {paymentConfig.gcashNumber && <p><b>Can’t pay using the QR code?</b> You may send the payment manually through GCash to <b>{paymentConfig.gcashNumber}</b> instead.</p>}
                     </div>
                   </div>
                 ) : (
