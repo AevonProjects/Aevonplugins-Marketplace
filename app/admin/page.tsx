@@ -15,6 +15,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import RichTextEditor from "@/components/RichTextEditor";
 
 type PluginRow = {
   id: string;
@@ -29,6 +30,24 @@ type PluginRow = {
   file_name?: string | null;
   file_path?: string | null;
   file_size?: number | null;
+  description_html?: string | null;
+  gallery_images?: string[] | null;
+  wiki_url?: string | null;
+  youtube_url?: string | null;
+  discord_url?: string | null;
+};
+
+type OrderRow = {
+  id: string;
+  order_code: string;
+  customer_email: string;
+  amount: number;
+  currency: string;
+  payment_method: string;
+  status: string;
+  created_at: string;
+  plugin_id: string;
+  plugins?: { name?: string } | null;
 };
 
 type Notice = { type: "success" | "error" | "info"; text: string } | null;
@@ -48,12 +67,21 @@ export default function AdminPage() {
   const [plugins, setPlugins] = useState<PluginRow[]>([]);
   const [loadingPlugins, setLoadingPlugins] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [orders, setOrders] = useState<OrderRow[]>([]);
+  const [loadingOrders, setLoadingOrders] = useState(false);
+  const [orderBusy, setOrderBusy] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [description, setDescription] = useState("");
+  const [descriptionHtml, setDescriptionHtml] = useState("");
   const [version, setVersion] = useState("1.0.0");
+  const [wikiUrl, setWikiUrl] = useState("");
+  const [youtubeUrl, setYoutubeUrl] = useState("");
+  const [discordUrl, setDiscordUrl] = useState("");
+  const [jarFile, setJarFile] = useState<File | null>(null);
+  const [galleryFiles, setGalleryFiles] = useState<(File | null)[]>([null, null, null]);
   const [price, setPrice] = useState("0");
   const [status, setStatus] = useState<"draft" | "published">("published");
 
@@ -67,7 +95,10 @@ export default function AdminPage() {
     setName("");
     setSlug("");
     setDescription("");
+    setDescriptionHtml("");
     setVersion("1.0.0");
+    setWikiUrl(""); setYoutubeUrl(""); setDiscordUrl("");
+    setJarFile(null); setGalleryFiles([null, null, null]);
     setPrice("0");
     setStatus("published");
   }, []);
@@ -77,7 +108,7 @@ export default function AdminPage() {
     setLoadingPlugins(true);
     const { data, error } = await supabase
       .from("plugins")
-      .select("id,name,slug,description,version,price,status,created_at,updated_at,file_name,file_path,file_size")
+      .select("id,name,slug,description,description_html,version,price,status,created_at,updated_at,file_name,file_path,file_size,gallery_images,wiki_url,youtube_url,discord_url")
       .order("created_at", { ascending: false });
 
     setLoadingPlugins(false);
@@ -86,6 +117,22 @@ export default function AdminPage() {
       return;
     }
     setPlugins((data ?? []) as PluginRow[]);
+  }, []);
+
+  const loadOrders = useCallback(async () => {
+    if (!supabase) return;
+    setLoadingOrders(true);
+    const { data, error } = await supabase
+      .from("marketplace_orders")
+      .select("id,order_code,customer_email,amount,currency,payment_method,status,created_at,plugin_id,plugins(name)")
+      .order("created_at", { ascending: false })
+      .limit(100);
+    setLoadingOrders(false);
+    if (error) {
+      setNotice({ type: "error", text: `Could not load payment orders: ${error.message}` });
+      return;
+    }
+    setOrders((data ?? []) as unknown as OrderRow[]);
   }, []);
 
   useEffect(() => {
@@ -118,59 +165,85 @@ export default function AdminPage() {
       setAllowed(true);
       setChecking(false);
       setNotice(null);
-      await loadPlugins();
+      await Promise.all([loadPlugins(), loadOrders()]);
     })();
-  }, [loadPlugins]);
+  }, [loadPlugins, loadOrders]);
+
+  function sanitizeRichHtml(html: string) {
+    const root = document.createElement("div"); root.innerHTML = html;
+    root.querySelectorAll("script,iframe,object,embed,link,meta,style").forEach((el)=>el.remove());
+    root.querySelectorAll("*").forEach((el)=>{
+      for (const attr of Array.from(el.attributes)) {
+        const n=attr.name.toLowerCase(); const v=attr.value.trim().toLowerCase();
+        if(n.startsWith("on") || n==="srcdoc" || ((n==="href"||n==="src") && v.startsWith("javascript:"))) el.removeAttribute(attr.name);
+      }
+    });
+    return root.innerHTML;
+  }
+  function plainFromHtml(html: string) {
+    const el = document.createElement("div"); el.innerHTML = html; return (el.textContent || "").trim();
+  }
+
+  async function validateImage(file: File) {
+    if (file.size > 5 * 1024 * 1024) throw new Error(`${file.name} is larger than 5 MB.`);
+    const url = URL.createObjectURL(file);
+    try {
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => { const i = new Image(); i.onload=()=>resolve(i); i.onerror=reject; i.src=url; });
+      if (img.naturalWidth < 500 || img.naturalHeight < 500) throw new Error(`${file.name} must be at least 500×500 pixels.`);
+    } finally { URL.revokeObjectURL(url); }
+  }
+
+  async function uploadMedia(pluginId: string, file: File) {
+    if (!supabase) throw new Error("Supabase is not configured.");
+    await validateImage(file);
+    const {data:s}=await supabase.auth.getSession(); const token=s.session?.access_token;
+    const prep=await fetch(`/api/admin/plugins/${pluginId}/media-upload-url`,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({fileName:file.name,fileSize:file.size,fileType:file.type})});
+    const pj=await prep.json(); if(!prep.ok) throw new Error(pj.error||"Could not prepare image upload.");
+    const up=await supabase.storage.from("plugin-media").uploadToSignedUrl(pj.path,pj.token,file,{contentType:file.type});
+    if(up.error) throw up.error;
+    return supabase.storage.from("plugin-media").getPublicUrl(pj.path).data.publicUrl;
+  }
+
+  async function uploadJarById(pluginId: string, pluginName: string, file: File) {
+    if (!supabase) throw new Error("Supabase is not configured.");
+    if (!file.name.toLowerCase().endsWith(".jar")) throw new Error("Please select a .jar plugin file.");
+    const {data:s}=await supabase.auth.getSession(); const token=s.session?.access_token;
+    const prep=await fetch(`/api/admin/plugins/${pluginId}/upload-url`,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({fileName:file.name,fileSize:file.size})});
+    const pj=await prep.json(); if(!prep.ok) throw new Error(pj.error||"Could not prepare JAR upload.");
+    const up=await supabase.storage.from("plugin-files").uploadToSignedUrl(pj.path,pj.token,file,{contentType:"application/java-archive"}); if(up.error) throw up.error;
+    const save=await fetch(`/api/admin/plugins/${pluginId}/file`,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({path:pj.path,fileName:file.name,fileSize:file.size})});
+    const sj=await save.json(); if(!save.ok) throw new Error(sj.error||`Could not save ${pluginName} JAR metadata.`);
+  }
 
   async function submitPlugin(e: FormEvent) {
     e.preventDefault();
     if (!supabase || saving) return;
-
     const normalizedSlug = makeSlug(slug || name);
-    if (!normalizedSlug) {
-      setNotice({ type: "error", text: "Please enter a valid plugin name or slug." });
-      return;
-    }
-
-    setSaving(true);
-    setNotice({
-      type: "info",
-      text: editingId ? "Saving plugin changes…" : "Creating plugin…",
-    });
-
-    const payload = {
-      name: name.trim(),
-      slug: normalizedSlug,
-      description: description.trim(),
-      version: version.trim(),
-      price: Number(price) || 0,
-      status,
-      updated_at: new Date().toISOString(),
-    };
-
-    const result = editingId
-      ? await supabase.from("plugins").update(payload).eq("id", editingId)
-      : await supabase.from("plugins").insert(payload);
-
-    setSaving(false);
-
-    if (result.error) {
-      const duplicate = result.error.code === "23505";
-      setNotice({
-        type: "error",
-        text: duplicate
-          ? `A plugin with the slug “${normalizedSlug}” already exists.`
-          : result.error.message,
-      });
-      return;
-    }
-
-    setNotice({
-      type: "success",
-      text: editingId ? "Plugin updated successfully." : "Plugin created successfully.",
-    });
-    resetForm();
-    await loadPlugins();
+    if (!normalizedSlug) { setNotice({ type: "error", text: "Please enter a valid plugin name or slug." }); return; }
+    const existingImages = editingPlugin?.gallery_images ?? [];
+    const futureImageCount = [0,1,2].filter((i) => Boolean(galleryFiles[i] || existingImages[i])).length;
+    if (status === "published" && futureImageCount < 3) { setNotice({type:"error",text:"Published plugins require 3 carousel images."}); return; }
+    if (status === "published" && !editingPlugin?.file_name && !jarFile) { setNotice({type:"error",text:"Published plugins require a JAR file."}); return; }
+    try {
+      for (const f of galleryFiles) if (f) await validateImage(f);
+      setSaving(true); setNotice({ type: "info", text: editingId ? "Saving plugin content and uploads…" : "Creating plugin and uploading content…" });
+      const safeHtml = sanitizeRichHtml(descriptionHtml);
+      const plain = plainFromHtml(safeHtml) || description.trim();
+      const payload = { name:name.trim(), slug:normalizedSlug, description:plain.slice(0,1000), description_html:safeHtml.trim(), version:version.trim(), price:Number(price)||0, status, wiki_url:wikiUrl.trim()||null, youtube_url:youtubeUrl.trim()||null, discord_url:discordUrl.trim()||null, updated_at:new Date().toISOString() };
+      let pluginId = editingId;
+      if (editingId) { const r=await supabase.from("plugins").update(payload).eq("id",editingId); if(r.error) throw r.error; }
+      else { const r=await supabase.from("plugins").insert(payload).select("id").single(); if(r.error) throw r.error; pluginId=r.data.id; }
+      if (!pluginId) throw new Error("Could not determine plugin ID.");
+      if (jarFile) await uploadJarById(pluginId, name.trim(), jarFile);
+      if (galleryFiles.some(Boolean)) {
+        const urls:string[]=[];
+        for (let i=0;i<3;i++) { const f=galleryFiles[i]; if(f) urls[i]=await uploadMedia(pluginId,f); else if(existingImages[i]) urls[i]=existingImages[i]; }
+        const r=await supabase.from("plugins").update({gallery_images:urls.filter(Boolean),updated_at:new Date().toISOString()}).eq("id",pluginId); if(r.error) throw r.error;
+      }
+      setNotice({type:"success",text:editingId?"Plugin listing updated successfully.":"Plugin created and uploaded successfully."});
+      resetForm(); await loadPlugins();
+    } catch (err:any) { const duplicate=err?.code==="23505"; setNotice({type:"error",text:duplicate?`A plugin with the slug “${normalizedSlug}” already exists.`:(err?.message||"Could not save plugin.")}); }
+    finally { setSaving(false); }
   }
 
   function beginEdit(plugin: PluginRow) {
@@ -178,7 +251,10 @@ export default function AdminPage() {
     setName(plugin.name);
     setSlug(plugin.slug);
     setDescription(plugin.description ?? "");
+    setDescriptionHtml(plugin.description_html || plugin.description || "");
     setVersion(plugin.version ?? "1.0.0");
+    setWikiUrl(plugin.wiki_url ?? ""); setYoutubeUrl(plugin.youtube_url ?? ""); setDiscordUrl(plugin.discord_url ?? "");
+    setJarFile(null); setGalleryFiles([null,null,null]);
     setPrice(String(plugin.price ?? 0));
     setStatus(plugin.status === "published" ? "published" : "draft");
     setNotice({ type: "info", text: `Editing ${plugin.name}.` });
@@ -245,6 +321,29 @@ export default function AdminPage() {
     setNotice({type:"success",text:`${file.name} uploaded for ${plugin.name}.`}); await loadPlugins();
   }
 
+  async function reviewOrder(order: OrderRow, action: "approve" | "reject") {
+    if (!supabase || orderBusy) return;
+    if (action === "approve" && !window.confirm(`Approve ${order.order_code}?\n\nOnly approve after you have verified the GCash receipt in Discord.`)) return;
+    let note = "";
+    if (action === "reject") {
+      note = window.prompt("Optional rejection note:") || "";
+      if (!window.confirm(`Reject ${order.order_code}?`)) return;
+    }
+    setOrderBusy(order.id);
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token;
+    const res = await fetch(`/api/admin/orders/${order.id}/${action}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ note })
+    });
+    const body = await res.json();
+    setOrderBusy(null);
+    if (!res.ok) { setNotice({ type: "error", text: body.error || `Could not ${action} order.` }); return; }
+    setNotice({ type: "success", text: action === "approve" ? "Payment approved. Plugin ownership and license were granted." : "Order rejected." });
+    await loadOrders();
+  }
+
   return (
     <div className="pageWrap adminWrap">
       <p className="eyebrow">ADMINISTRATION</p>
@@ -288,55 +387,35 @@ export default function AdminPage() {
               )}
             </div>
 
-            <form onSubmit={submitPlugin}>
-              <label>
-                Name
-                <input required value={name} onChange={(e) => setName(e.target.value)} placeholder="ALicense" />
-              </label>
-              <label>
-                Slug
-                <input
-                  value={slug}
-                  onChange={(e) => setSlug(e.target.value)}
-                  placeholder={name ? makeSlug(name) : "alicense"}
-                />
-              </label>
-              <label>
-                Description
-                <textarea
-                  required
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="What does this plugin do?"
-                />
-              </label>
-              <div className="threeCol">
-                <label>
-                  Version
-                  <input required value={version} onChange={(e) => setVersion(e.target.value)} />
-                </label>
-                <label>
-                  Price
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={price}
-                    onChange={(e) => setPrice(e.target.value)}
-                  />
-                </label>
-                <label>
-                  Status
-                  <select value={status} onChange={(e) => setStatus(e.target.value as "draft" | "published")}>
-                    <option value="published">Published</option>
-                    <option value="draft">Draft</option>
-                  </select>
-                </label>
+            <form onSubmit={submitPlugin} className="pluginEditorForm">
+              <div className="editorTwoCol">
+                <label>Plugin Name<input required value={name} onChange={(e)=>setName(e.target.value)} placeholder="ALicense" /></label>
+                <label>Plugin Version<input required value={version} onChange={(e)=>setVersion(e.target.value)} placeholder="1.1.1" /></label>
               </div>
-              <button className="primaryBtn" type="submit" disabled={saving}>
-                {saving ? <Loader2 size={16} className="spin" /> : editingPlugin ? <Edit3 size={16} /> : <Plus size={16} />}
-                {saving ? "Saving…" : editingPlugin ? "Save changes" : "Create plugin"}
-              </button>
+              <div className="editorTwoCol">
+                <label>Slug<input value={slug} onChange={(e)=>setSlug(e.target.value)} placeholder={name?makeSlug(name):"alicense"}/></label>
+                <label>Price (PHP)<input type="number" min="0" step="0.01" value={price} onChange={(e)=>setPrice(e.target.value)}/></label>
+              </div>
+              <label>Upload JAR File <span className="fieldHint">{editingPlugin?.file_name ? `Current: ${editingPlugin.file_name}` : "Required before publishing"}</span>
+                <input type="file" accept=".jar,application/java-archive" onChange={(e)=>setJarFile(e.target.files?.[0]??null)} />
+              </label>
+              <label>Full Plugin Description <span className="fieldHint">Emojis, bold, italic, underline, fonts, sizes, colors, and lists supported.</span></label>
+              <RichTextEditor value={descriptionHtml} onChange={setDescriptionHtml} />
+
+              <div className="galleryEditorBlock">
+                <div><strong>Carousel Pictures</strong><p>Exactly 3 display slots · each image max 5 MB · minimum 500×500 pixels.</p></div>
+                <div className="galleryUploadGrid">{[0,1,2].map((i)=><label className="galleryUploadSlot" key={i}><span>Picture {i+1}</span><input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(e)=>{const next=[...galleryFiles];next[i]=e.target.files?.[0]??null;setGalleryFiles(next)}}/><small>{galleryFiles[i]?.name || editingPlugin?.gallery_images?.[i]?.split('/').pop() || "Choose image"}</small></label>)}</div>
+              </div>
+
+              <div className="linkEditorBlock"><strong>Plugin Links</strong><p>Add up to 3 official links shown on the plugin information page.</p>
+                <div className="threeCol">
+                  <label>Wiki URL<input type="url" value={wikiUrl} onChange={(e)=>setWikiUrl(e.target.value)} placeholder="https://..."/></label>
+                  <label>YouTube Tutorial<input type="url" value={youtubeUrl} onChange={(e)=>setYoutubeUrl(e.target.value)} placeholder="https://youtube.com/..."/></label>
+                  <label>Discord Link<input type="url" value={discordUrl} onChange={(e)=>setDiscordUrl(e.target.value)} placeholder="https://discord.gg/..."/></label>
+                </div>
+              </div>
+              <label>Status<select value={status} onChange={(e)=>setStatus(e.target.value as "draft"|"published")}><option value="published">Published</option><option value="draft">Draft</option></select></label>
+              <button className="primaryBtn editorSaveBtn" type="submit" disabled={saving}>{saving?<Loader2 size={16} className="spin"/>:editingPlugin?<Edit3 size={16}/>:<Plus size={16}/>} {saving?"Saving & Uploading…":editingPlugin?"Save Plugin":"Create Plugin"}</button>
             </form>
           </div>
 
@@ -375,7 +454,7 @@ export default function AdminPage() {
                       <div className="pluginMeta">
                         <span>/{plugin.slug}</span>
                         <span>v{plugin.version || "—"}</span>
-                        <span>{Number(plugin.price || 0) === 0 ? "Free" : `$${Number(plugin.price).toFixed(2)}`}</span>
+                        <span>{Number(plugin.price || 0) === 0 ? "Free" : `₱${Number(plugin.price).toFixed(2)}`}</span>
                         <span>{plugin.file_name ? `File: ${plugin.file_name}` : "No JAR uploaded"}</span>
                       </div>
                     </div>
@@ -396,6 +475,47 @@ export default function AdminPage() {
                       </button>
                     </div>
                   </article>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="adminListSection paymentOrdersSection">
+            <div className="sectionHeading">
+              <div>
+                <h2>GCash Payment Verification</h2>
+                <p className="muted smallMuted">Verify the customer's receipt in Discord first. Approving here grants plugin ownership and creates the license automatically.</p>
+              </div>
+              <button className="secondaryBtn" type="button" onClick={loadOrders} disabled={loadingOrders}>
+                <RefreshCw size={14} className={loadingOrders ? "spin" : ""}/> Refresh Orders
+              </button>
+            </div>
+            {orders.length === 0 ? (
+              <div className="emptyCard">No GCash payment orders yet.</div>
+            ) : (
+              <div className="paymentOrderList">
+                {orders.map((order) => (
+                  <div className={`paymentOrderRow ${order.status}`} key={order.id}>
+                    <div className="paymentOrderMain">
+                      <div className="adminPluginTitleRow">
+                        <h3>{order.plugins?.name || "Plugin"}</h3>
+                        <span className={`orderStatus ${order.status}`}>{order.status}</span>
+                      </div>
+                      <code>{order.order_code}</code>
+                      <p>{order.customer_email}</p>
+                      <div className="pluginMeta">
+                        <span>GCash</span><span>₱{Number(order.amount).toLocaleString()}</span><span>{new Date(order.created_at).toLocaleString()}</span>
+                      </div>
+                    </div>
+                    <div className="adminPluginActions">
+                      {order.status === "pending" ? (<>
+                        <button className="secondaryBtn" disabled={orderBusy === order.id} onClick={() => reviewOrder(order, "reject")}>Reject</button>
+                        <button className="primaryBtn" disabled={orderBusy === order.id} onClick={() => reviewOrder(order, "approve")}>
+                          <CheckCircle2 size={14}/> {orderBusy === order.id ? "Working…" : "Approve & Grant"}
+                        </button>
+                      </>) : <span className="muted smallMuted">Reviewed</span>}
+                    </div>
+                  </div>
                 ))}
               </div>
             )}

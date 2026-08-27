@@ -13,9 +13,19 @@ import {
   Package,
   ShieldCheck,
   ShoppingCart,
-  TriangleAlert
+  TriangleAlert,
+  WalletCards,
+  ExternalLink,
+  Clock3,
+  Copy,
+  BookOpen,
+  Youtube,
+  MessageCircle,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { paymentConfig } from "@/lib/paymentConfig";
 
 type PluginRow = {
   id: string;
@@ -27,6 +37,11 @@ type PluginRow = {
   status: string;
   created_at: string;
   updated_at: string;
+  description_html?: string | null;
+  gallery_images?: string[] | null;
+  wiki_url?: string | null;
+  youtube_url?: string | null;
+  discord_url?: string | null;
 };
 
 type AccessRow = {
@@ -56,6 +71,10 @@ export default function PluginDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [showPayment, setShowPayment] = useState(false);
+  const [gcashOrder, setGcashOrder] = useState<{order_code:string;amount:number;status:string}|null>(null);
+  const [paymentBusy, setPaymentBusy] = useState(false);
+  const [galleryIndex, setGalleryIndex] = useState(0);
 
   useEffect(() => {
     async function loadPlugin() {
@@ -70,7 +89,7 @@ export default function PluginDetailPage() {
 
       const { data: pluginData, error: pluginError } = await supabase
         .from("plugins")
-        .select("id,name,slug,description,version,price,status,created_at,updated_at")
+        .select("id,name,slug,description,description_html,gallery_images,wiki_url,youtube_url,discord_url,version,price,status,created_at,updated_at")
         .eq("slug", slug)
         .eq("status", "published")
         .maybeSingle();
@@ -148,6 +167,29 @@ export default function PluginDetailPage() {
     window.location.href = body.url;
   }
 
+
+  async function createGcashOrder() {
+    if (!plugin || !supabase) return;
+    setPaymentBusy(true);
+    setActionMessage(null);
+    const token = await authToken();
+    const res = await fetch('/api/orders/gcash', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ pluginId: plugin.id })
+    });
+    const body = await res.json();
+    setPaymentBusy(false);
+    if (!res.ok) { setActionMessage(body.error || 'Could not create GCash order.'); return; }
+    setGcashOrder(body.order);
+  }
+
+  async function copyOrderCode() {
+    if (!gcashOrder) return;
+    await navigator.clipboard?.writeText(gcashOrder.order_code);
+    setActionMessage('Order reference copied.');
+  }
+
   if (loading) {
     return (
       <div className="pageWrap pluginDetailWrap">
@@ -200,6 +242,30 @@ export default function PluginDetailPage() {
         </div>
       </section>
 
+      {(plugin.gallery_images?.length ?? 0) > 0 && (
+        <section className="pluginGallerySection">
+          <div className="pluginGalleryFrame">
+            <img src={plugin.gallery_images![galleryIndex]} alt={`${plugin.name} screenshot ${galleryIndex + 1}`} />
+            {plugin.gallery_images!.length > 1 && <>
+              <button className="galleryNav galleryPrev" onClick={()=>setGalleryIndex((galleryIndex-1+plugin.gallery_images!.length)%plugin.gallery_images!.length)} aria-label="Previous image"><ChevronLeft/></button>
+              <button className="galleryNav galleryNext" onClick={()=>setGalleryIndex((galleryIndex+1)%plugin.gallery_images!.length)} aria-label="Next image"><ChevronRight/></button>
+            </>}
+          </div>
+          <div className="galleryDots">{plugin.gallery_images!.map((_,i)=><button key={i} className={i===galleryIndex?"active":""} onClick={()=>setGalleryIndex(i)} aria-label={`Show image ${i+1}`}/>)}</div>
+        </section>
+      )}
+
+      <section className="pluginFullDescription detailPanel">
+        <div className="detailSectionTitle"><Package size={19}/><div><h2>About {plugin.name}</h2><p>Complete plugin information and features.</p></div></div>
+        {plugin.description_html ? <div className="richPluginDescription" dangerouslySetInnerHTML={{__html:plugin.description_html}}/> : <p className="richPluginDescription">{plugin.description || "Official Aevon plugin."}</p>}
+      </section>
+
+      {(plugin.wiki_url || plugin.youtube_url || plugin.discord_url) && <section className="pluginResourceLinks">
+        {plugin.wiki_url && <a href={plugin.wiki_url} target="_blank" rel="noreferrer"><BookOpen size={19}/><span><strong>Plugin Wiki</strong><small>Documentation & commands</small></span><ExternalLink size={14}/></a>}
+        {plugin.youtube_url && <a href={plugin.youtube_url} target="_blank" rel="noreferrer"><Youtube size={19}/><span><strong>YouTube Tutorial</strong><small>Watch the setup guide</small></span><ExternalLink size={14}/></a>}
+        {plugin.discord_url && <a href={plugin.discord_url} target="_blank" rel="noreferrer"><MessageCircle size={19}/><span><strong>Discord</strong><small>Support & community</small></span><ExternalLink size={14}/></a>}
+      </section>}
+
       <div className="detailGrid">
         <section className="detailPanel">
           <div className="detailSectionTitle">
@@ -233,9 +299,9 @@ export default function PluginDetailPage() {
               <ShoppingCart size={22} />
               <div>
                 <strong>{price > 0 ? "Not purchased yet" : "Access not assigned yet"}</strong>
-                <p>{price > 0 ? "Secure checkout will be connected in the next marketplace stage." : "Free-plugin claiming will be connected in the next marketplace stage."}</p>
+                <p>{price > 0 ? "Choose a payment method below to purchase this plugin." : "Free-plugin claiming will be connected in the next marketplace stage."}</p>
               </div>
-              {price > 0 ? <button className="primaryBtn" disabled>Purchase Coming Soon</button> : <button className="primaryBtn" onClick={claimFree} disabled={actionBusy}>{actionBusy ? "Claiming…" : "Add to Library"}</button>}
+              {price > 0 ? <button className="primaryBtn" onClick={() => setShowPayment(true)}>Choose Payment</button> : <button className="primaryBtn" onClick={claimFree} disabled={actionBusy}>{actionBusy ? "Claiming…" : "Add to Library"}</button>}
             </div>
           )}
 
@@ -269,7 +335,7 @@ export default function PluginDetailPage() {
             <button
               className="pluginActionBtn purchaseAction"
               disabled={actionBusy}
-              onClick={() => setActionMessage("Secure checkout is the next marketplace step. Purchasing is not enabled yet.")}
+              onClick={() => setShowPayment(true)}
             >
               <ShoppingCart size={18} /> PURCHASE PLUGIN
             </button>
@@ -291,6 +357,70 @@ export default function PluginDetailPage() {
           </div>
         </aside>
       </div>
+
+
+      {showPayment && (
+        <div className="paymentModalBackdrop" onMouseDown={(e) => { if (e.currentTarget === e.target) setShowPayment(false); }}>
+          <div className="paymentModal" role="dialog" aria-modal="true" aria-label="Choose payment method">
+            <button className="paymentClose" onClick={() => setShowPayment(false)} aria-label="Close">×</button>
+            <div className="paymentModalHeader">
+              <WalletCards size={24} />
+              <div><span>CHECKOUT</span><h2>Choose Payment Method</h2><p>{plugin.name} · ₱{price.toLocaleString()}</p></div>
+            </div>
+
+            {!gcashOrder ? (
+              <div className="paymentChoices">
+                <button className="paymentChoice gcashChoice" onClick={createGcashOrder} disabled={paymentBusy}>
+                  <strong>GCash</strong>
+                  <span>Manual verification · Up to 24 hours</span>
+                  <small>{paymentBusy ? 'Preparing order…' : 'PAY WITH GCASH'}</small>
+                </button>
+                <button className="paymentChoice paypalChoice" onClick={() => setActionMessage('PayPal automatic checkout is the next payment integration step.')} disabled>
+                  <strong>PayPal</strong>
+                  <span>Automatic verification · Instant access</span>
+                  <small>COMING NEXT</small>
+                </button>
+              </div>
+            ) : (
+              <div className="gcashInstructions">
+                <div className="gcashOrderTop">
+                  <div><span>Amount to pay</span><strong>₱{Number(gcashOrder.amount).toLocaleString()}</strong></div>
+                  <div><span>Order reference</span><strong className="orderCode">{gcashOrder.order_code}</strong></div>
+                </div>
+
+                {(paymentConfig.gcashQrUrl || paymentConfig.gcashAccountName || paymentConfig.gcashNumber) ? (
+                  <div className="gcashPayBox">
+                    {paymentConfig.gcashQrUrl && <img className="gcashQr" src={paymentConfig.gcashQrUrl} alt="GCash payment QR" />}
+                    <div>
+                      <span>GCash payment details</span>
+                      {paymentConfig.gcashAccountName && <strong>{paymentConfig.gcashAccountName}</strong>}
+                      {paymentConfig.gcashNumber && <strong>{paymentConfig.gcashNumber}</strong>}
+                      <p>Pay the exact amount shown above before submitting your receipt for verification.</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="gcashConfigNotice">GCash QR/account details have not been configured yet. Keep this order reference and contact staff in Discord.</div>
+                )}
+
+                <div className="verificationNotice">
+                  <Clock3 size={19} />
+                  <div>
+                    <strong>Payment verification required</strong>
+                    <p>After completing your GCash payment, take a clear screenshot of your payment receipt and join our Discord server. Create a support ticket and submit the receipt together with your order reference. Once your payment has been verified, you will receive a notification and the plugin will become available in <b>My Library</b>.</p>
+                    <p><b>Please allow up to 24 hours for GCash payment verification.</b></p>
+                  </div>
+                </div>
+
+                <div className="paymentActionRow">
+                  <button className="secondaryBtn" onClick={copyOrderCode}><Copy size={15}/> Copy Order Reference</button>
+                  <a className="primaryBtn" href={paymentConfig.discordInvite} target="_blank" rel="noreferrer">Join Discord & Create Ticket <ExternalLink size={15}/></a>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
