@@ -1,407 +1,154 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import {
-  CheckCircle2,
-  Edit3,
-  Eye,
-  EyeOff,
-  Loader2,
-  Plus,
-  RefreshCw,
-  ShieldCheck,
-  Trash2,
-  UploadCloud,
-  XCircle,
-} from "lucide-react";
+import { FormEvent, useEffect, useState } from "react";
+import { KeyRound, LogIn, LogOut, MailCheck, UserPlus } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
-type PluginRow = {
-  id: string;
-  name: string;
-  slug: string;
-  description: string | null;
-  version: string | null;
-  price: number;
-  status: "draft" | "published" | string;
-  created_at: string;
-  updated_at: string;
-  file_name?: string | null;
-  file_path?: string | null;
-  file_size?: number | null;
-};
+type Mode = "login" | "register" | "forgot" | "reset";
 
-type Notice = { type: "success" | "error" | "info"; text: string } | null;
-
-function makeSlug(value: string) {
-  return value
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
-export default function AdminPage() {
-  const [allowed, setAllowed] = useState(false);
-  const [checking, setChecking] = useState(true);
-  const [notice, setNotice] = useState<Notice>({ type: "info", text: "Checking admin access…" });
-  const [plugins, setPlugins] = useState<PluginRow[]>([]);
-  const [loadingPlugins, setLoadingPlugins] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-
-  const [name, setName] = useState("");
-  const [slug, setSlug] = useState("");
-  const [description, setDescription] = useState("");
-  const [version, setVersion] = useState("1.0.0");
-  const [price, setPrice] = useState("0");
-  const [status, setStatus] = useState<"draft" | "published">("published");
-
-  const editingPlugin = useMemo(
-    () => plugins.find((plugin) => plugin.id === editingId) ?? null,
-    [editingId, plugins]
-  );
-
-  const resetForm = useCallback(() => {
-    setEditingId(null);
-    setName("");
-    setSlug("");
-    setDescription("");
-    setVersion("1.0.0");
-    setPrice("0");
-    setStatus("published");
-  }, []);
-
-  const loadPlugins = useCallback(async () => {
-    if (!supabase) return;
-    setLoadingPlugins(true);
-    const { data, error } = await supabase
-      .from("plugins")
-      .select("id,name,slug,description,version,price,status,created_at,updated_at,file_name,file_path,file_size")
-      .order("created_at", { ascending: false });
-
-    setLoadingPlugins(false);
-    if (error) {
-      setNotice({ type: "error", text: `Could not load plugins: ${error.message}` });
-      return;
-    }
-    setPlugins((data ?? []) as PluginRow[]);
-  }, []);
+export default function LoginPage() {
+  const [mode, setMode] = useState<Mode>("login");
+  const [email, setEmail] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
 
   useEffect(() => {
-    (async () => {
-      if (!supabase) {
-        setNotice({ type: "error", text: "Supabase is not configured." });
-        setChecking(false);
-        return;
+    supabase?.auth.getUser().then(({ data }) => setUserEmail(data.user?.email ?? null));
+    const { data } = supabase?.auth.onAuthStateChange((event, session) => {
+      setUserEmail(session?.user.email ?? null);
+      if (event === "PASSWORD_RECOVERY") {
+        setMode("reset");
+        setMessage("Recovery link verified. Choose a new password.");
       }
+    }) ?? { data: null };
+    return () => data?.subscription.unsubscribe();
+  }, []);
 
-      const { data: auth, error: authError } = await supabase.auth.getUser();
-      if (authError || !auth.user) {
-        setNotice({ type: "error", text: "Sign in with your admin account first." });
-        setChecking(false);
-        return;
-      }
+  function switchMode(next: Mode) {
+    setMode(next);
+    setMessage("");
+    setPassword("");
+    setConfirmPassword("");
+  }
 
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", auth.user.id)
-        .single();
-
-      if (error || data?.role !== "admin") {
-        setNotice({ type: "error", text: "This account does not have admin access." });
-        setChecking(false);
-        return;
-      }
-
-      setAllowed(true);
-      setChecking(false);
-      setNotice(null);
-      await loadPlugins();
-    })();
-  }, [loadPlugins]);
-
-  async function submitPlugin(e: FormEvent) {
+  async function login(e: FormEvent) {
     e.preventDefault();
-    if (!supabase || saving) return;
+    if (!supabase) return setMessage("Supabase environment variables are missing.");
+    setBusy(true);
+    setMessage("Signing in…");
+    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    setBusy(false);
+    setMessage(error ? error.message : "Signed in successfully.");
+  }
 
-    const normalizedSlug = makeSlug(slug || name);
-    if (!normalizedSlug) {
-      setNotice({ type: "error", text: "Please enter a valid plugin name or slug." });
-      return;
-    }
+  async function register(e: FormEvent) {
+    e.preventDefault();
+    if (password.length < 8) return setMessage("Use a password with at least 8 characters.");
+    if (password !== confirmPassword) return setMessage("Passwords do not match.");
 
-    setSaving(true);
-    setNotice({
-      type: "info",
-      text: editingId ? "Saving plugin changes…" : "Creating plugin…",
-    });
-
-    const payload = {
-      name: name.trim(),
-      slug: normalizedSlug,
-      description: description.trim(),
-      version: version.trim(),
-      price: Number(price) || 0,
-      status,
-      updated_at: new Date().toISOString(),
-    };
-
-    const result = editingId
-      ? await supabase.from("plugins").update(payload).eq("id", editingId)
-      : await supabase.from("plugins").insert(payload);
-
-    setSaving(false);
-
-    if (result.error) {
-      const duplicate = result.error.code === "23505";
-      setNotice({
-        type: "error",
-        text: duplicate
-          ? `A plugin with the slug “${normalizedSlug}” already exists.`
-          : result.error.message,
+    setBusy(true);
+    setMessage("Checking registration security…");
+    try {
+      const response = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim(), password, displayName: displayName.trim() })
       });
-      return;
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || "Registration failed.");
+      setMessage(body.message || "Registration submitted. Check your email to verify your account before signing in.");
+      setPassword("");
+      setConfirmPassword("");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Registration failed.");
+    } finally {
+      setBusy(false);
     }
-
-    setNotice({
-      type: "success",
-      text: editingId ? "Plugin updated successfully." : "Plugin created successfully.",
-    });
-    resetForm();
-    await loadPlugins();
   }
 
-  function beginEdit(plugin: PluginRow) {
-    setEditingId(plugin.id);
-    setName(plugin.name);
-    setSlug(plugin.slug);
-    setDescription(plugin.description ?? "");
-    setVersion(plugin.version ?? "1.0.0");
-    setPrice(String(plugin.price ?? 0));
-    setStatus(plugin.status === "published" ? "published" : "draft");
-    setNotice({ type: "info", text: `Editing ${plugin.name}.` });
-    window.scrollTo({ top: 0, behavior: "smooth" });
+  async function forgot(e: FormEvent) {
+    e.preventDefault();
+    if (!supabase) return setMessage("Supabase environment variables are missing.");
+    setBusy(true);
+    const redirectTo = `${window.location.origin}/login`;
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo });
+    setBusy(false);
+    setMessage(error ? error.message : "If an account exists for that email, a password reset link has been sent.");
   }
 
-  async function toggleStatus(plugin: PluginRow) {
-    if (!supabase) return;
-    const nextStatus = plugin.status === "published" ? "draft" : "published";
-    setNotice({
-      type: "info",
-      text: `${nextStatus === "published" ? "Publishing" : "Unpublishing"} ${plugin.name}…`,
-    });
-
-    const { error } = await supabase
-      .from("plugins")
-      .update({ status: nextStatus, updated_at: new Date().toISOString() })
-      .eq("id", plugin.id);
-
-    if (error) {
-      setNotice({ type: "error", text: error.message });
-      return;
-    }
-
-    setNotice({
-      type: "success",
-      text: `${plugin.name} is now ${nextStatus}.`,
-    });
-    await loadPlugins();
+  async function resetPassword(e: FormEvent) {
+    e.preventDefault();
+    if (!supabase) return setMessage("Supabase environment variables are missing.");
+    if (password.length < 8) return setMessage("Use a password with at least 8 characters.");
+    if (password !== confirmPassword) return setMessage("Passwords do not match.");
+    setBusy(true);
+    const { error } = await supabase.auth.updateUser({ password });
+    setBusy(false);
+    if (error) return setMessage(error.message);
+    setMessage("Password updated successfully. You can continue using your account.");
+    setPassword("");
+    setConfirmPassword("");
   }
 
-  async function deletePlugin(plugin: PluginRow) {
-    if (!supabase) return;
-    const confirmed = window.confirm(
-      `Delete ${plugin.name}?\n\nThis removes the marketplace plugin record. This action cannot be undone.`
-    );
-    if (!confirmed) return;
-
-    setNotice({ type: "info", text: `Deleting ${plugin.name}…` });
-    const { error } = await supabase.from("plugins").delete().eq("id", plugin.id);
-
-    if (error) {
-      setNotice({ type: "error", text: error.message });
-      return;
-    }
-
-    if (editingId === plugin.id) resetForm();
-    setNotice({ type: "success", text: `${plugin.name} was deleted.` });
-    await loadPlugins();
+  async function logout() {
+    await supabase?.auth.signOut();
+    setMessage("Signed out.");
+    setUserEmail(null);
+    setMode("login");
   }
 
+  return <div className="pageWrap narrow accountPage">
+    <p className="eyebrow">AEVON ACCOUNT</p>
+    <h1>{mode === "register" ? "Create your account" : mode === "forgot" ? "Forgot password" : mode === "reset" ? "Choose a new password" : "Marketplace Login"}</h1>
+    <p className="muted">Verified accounts protect plugin purchases, licenses, and downloads.</p>
 
-  async function uploadPluginFile(plugin: PluginRow, file: File | null) {
-    if (!file || !supabase) return;
-    if (!file.name.toLowerCase().endsWith(".jar")) return setNotice({type:"error",text:"Please select a .jar plugin file."});
-    setNotice({type:"info",text:`Preparing upload for ${plugin.name}…`});
-    const {data:s}=await supabase.auth.getSession(); const token=s.session?.access_token;
-    const prep=await fetch(`/api/admin/plugins/${plugin.id}/upload-url`,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({fileName:file.name,fileSize:file.size})});
-    const pj=await prep.json(); if(!prep.ok)return setNotice({type:"error",text:pj.error||"Could not prepare upload."});
-    const up=await supabase.storage.from("plugin-files").uploadToSignedUrl(pj.path,pj.token,file,{contentType:"application/java-archive"});
-    if(up.error)return setNotice({type:"error",text:up.error.message});
-    const save=await fetch(`/api/admin/plugins/${plugin.id}/file`,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({path:pj.path,fileName:file.name,fileSize:file.size})});
-    const sj=await save.json(); if(!save.ok)return setNotice({type:"error",text:sj.error||"Upload metadata failed."});
-    setNotice({type:"success",text:`${file.name} uploaded for ${plugin.name}.`}); await loadPlugins();
-  }
+    <div className="formCard accountCard">
+      {userEmail && mode !== "reset" ? <>
+        <div className="signedInMark"><MailCheck size={28}/></div>
+        <h3>Signed in</h3>
+        <p className="muted">{userEmail}</p>
+        <button className="primaryBtn" onClick={logout}><LogOut size={16}/> Sign out</button>
+      </> : <>
+        {mode !== "reset" && <div className="authTabs">
+          <button className={mode === "login" ? "active" : ""} type="button" onClick={() => switchMode("login")}>Login</button>
+          <button className={mode === "register" ? "active" : ""} type="button" onClick={() => switchMode("register")}>Register</button>
+        </div>}
 
-  return (
-    <div className="pageWrap adminWrap">
-      <p className="eyebrow">ADMINISTRATION</p>
-      <h1>Admin Dashboard</h1>
-      <p className="muted">Create and manage marketplace listings using your secured admin role.</p>
+        {mode === "login" && <form onSubmit={login}>
+          <label>Email<input type="email" autoComplete="email" required value={email} onChange={e=>setEmail(e.target.value)} /></label>
+          <label>Password<input type="password" autoComplete="current-password" required value={password} onChange={e=>setPassword(e.target.value)} /></label>
+          <button className="primaryBtn" disabled={busy} type="submit"><LogIn size={16}/> {busy ? "Signing in…" : "Sign in"}</button>
+          <button className="authTextButton" type="button" onClick={() => switchMode("forgot")}>Forgot your password?</button>
+        </form>}
 
-      {notice && (
-        <div className={`notice ${notice.type}`} role="status">
-          {notice.type === "success" ? (
-            <CheckCircle2 size={18} />
-          ) : notice.type === "error" ? (
-            <XCircle size={18} />
-          ) : (
-            <Loader2 size={18} className={checking || saving ? "spin" : ""} />
-          )}
-          <span>{notice.text}</span>
-        </div>
-      )}
+        {mode === "register" && <form onSubmit={register}>
+          <label>Display name <span className="optional">Optional</span><input type="text" maxLength={40} autoComplete="name" value={displayName} onChange={e=>setDisplayName(e.target.value)} /></label>
+          <label>Email<input type="email" autoComplete="email" required value={email} onChange={e=>setEmail(e.target.value)} /></label>
+          <label>Password<input type="password" minLength={8} autoComplete="new-password" required value={password} onChange={e=>setPassword(e.target.value)} /></label>
+          <label>Confirm password<input type="password" minLength={8} autoComplete="new-password" required value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} /></label>
+          <div className="securityNote">Registration checks the connection IP and blocks repeat registrations from the same IP. VPN/proxy registrations are rejected when reputation protection is configured.</div>
+          <button className="primaryBtn" disabled={busy} type="submit"><UserPlus size={16}/> {busy ? "Creating account…" : "Create account"}</button>
+        </form>}
 
-      {!allowed ? (
-        <div className="emptyCard">
-          <ShieldCheck size={24} />
-          <span>{checking ? "Checking admin access…" : "Admin access is required."}</span>
-        </div>
-      ) : (
-        <>
-          <div className="formCard">
-            <div className="sectionHeading">
-              <div>
-                <h3>{editingPlugin ? `Edit ${editingPlugin.name}` : "Add Plugin"}</h3>
-                <p className="muted smallMuted">
-                  {editingPlugin
-                    ? "Update the listing, then save your changes."
-                    : "Create a new marketplace listing. Slugs must be unique."}
-                </p>
-              </div>
-              {editingPlugin && (
-                <button className="secondaryBtn" type="button" onClick={resetForm}>
-                  Cancel edit
-                </button>
-              )}
-            </div>
+        {mode === "forgot" && <form onSubmit={forgot}>
+          <div className="authIcon"><KeyRound size={25}/></div>
+          <p className="muted authHelp">Enter your account email and we’ll send a secure password-reset link.</p>
+          <label>Email<input type="email" autoComplete="email" required value={email} onChange={e=>setEmail(e.target.value)} /></label>
+          <button className="primaryBtn" disabled={busy} type="submit"><KeyRound size={16}/> {busy ? "Sending…" : "Send reset link"}</button>
+          <button className="authTextButton" type="button" onClick={() => switchMode("login")}>Back to login</button>
+        </form>}
 
-            <form onSubmit={submitPlugin}>
-              <label>
-                Name
-                <input required value={name} onChange={(e) => setName(e.target.value)} placeholder="ALicense" />
-              </label>
-              <label>
-                Slug
-                <input
-                  value={slug}
-                  onChange={(e) => setSlug(e.target.value)}
-                  placeholder={name ? makeSlug(name) : "alicense"}
-                />
-              </label>
-              <label>
-                Description
-                <textarea
-                  required
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="What does this plugin do?"
-                />
-              </label>
-              <div className="threeCol">
-                <label>
-                  Version
-                  <input required value={version} onChange={(e) => setVersion(e.target.value)} />
-                </label>
-                <label>
-                  Price
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={price}
-                    onChange={(e) => setPrice(e.target.value)}
-                  />
-                </label>
-                <label>
-                  Status
-                  <select value={status} onChange={(e) => setStatus(e.target.value as "draft" | "published")}>
-                    <option value="published">Published</option>
-                    <option value="draft">Draft</option>
-                  </select>
-                </label>
-              </div>
-              <button className="primaryBtn" type="submit" disabled={saving}>
-                {saving ? <Loader2 size={16} className="spin" /> : editingPlugin ? <Edit3 size={16} /> : <Plus size={16} />}
-                {saving ? "Saving…" : editingPlugin ? "Save changes" : "Create plugin"}
-              </button>
-            </form>
-          </div>
-
-          <section className="adminListSection">
-            <div className="sectionHeading">
-              <div>
-                <p className="eyebrow">MARKETPLACE LISTINGS</p>
-                <h2>Manage Plugins</h2>
-                <p className="muted smallMuted">
-                  {plugins.length} plugin{plugins.length === 1 ? "" : "s"} currently visible to this admin account.
-                </p>
-              </div>
-              <button className="secondaryBtn" type="button" onClick={loadPlugins} disabled={loadingPlugins}>
-                <RefreshCw size={16} className={loadingPlugins ? "spin" : ""} />
-                Refresh
-              </button>
-            </div>
-
-            {loadingPlugins && plugins.length === 0 ? (
-              <div className="emptyCard"><Loader2 size={22} className="spin" /><span>Loading plugins…</span></div>
-            ) : plugins.length === 0 ? (
-              <div className="emptyCard"><ShieldCheck size={22} /><span>No plugin listings found.</span></div>
-            ) : (
-              <div className="adminPluginList">
-                {plugins.map((plugin) => (
-                  <article className="adminPluginRow" key={plugin.id}>
-                    <div className="adminPluginMain">
-                      <div className="adminPluginTitleRow">
-                        <h3>{plugin.name}</h3>
-                        <span className={`statusBadge ${plugin.status === "published" ? "published" : "draft"}`}>
-                          {plugin.status === "published" ? <Eye size={13} /> : <EyeOff size={13} />}
-                          {plugin.status}
-                        </span>
-                      </div>
-                      <p>{plugin.description || "No description."}</p>
-                      <div className="pluginMeta">
-                        <span>/{plugin.slug}</span>
-                        <span>v{plugin.version || "—"}</span>
-                        <span>{Number(plugin.price || 0) === 0 ? "Free" : `$${Number(plugin.price).toFixed(2)}`}</span>
-                        <span>{plugin.file_name ? `File: ${plugin.file_name}` : "No JAR uploaded"}</span>
-                      </div>
-                    </div>
-                    <div className="adminPluginActions">
-                      <label className="secondaryBtn fileUploadBtn">
-                        <UploadCloud size={15} /> {plugin.file_name ? "Replace JAR" : "Upload JAR"}
-                        <input type="file" accept=".jar,application/java-archive" hidden onChange={(e)=>uploadPluginFile(plugin,e.target.files?.[0] ?? null)} />
-                      </label>
-                      <button className="secondaryBtn" type="button" onClick={() => beginEdit(plugin)}>
-                        <Edit3 size={15} /> Edit
-                      </button>
-                      <button className="secondaryBtn" type="button" onClick={() => toggleStatus(plugin)}>
-                        {plugin.status === "published" ? <EyeOff size={15} /> : <Eye size={15} />}
-                        {plugin.status === "published" ? "Unpublish" : "Publish"}
-                      </button>
-                      <button className="dangerBtn" type="button" onClick={() => deletePlugin(plugin)}>
-                        <Trash2 size={15} /> Delete
-                      </button>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            )}
-          </section>
-        </>
-      )}
+        {mode === "reset" && <form onSubmit={resetPassword}>
+          <label>New password<input type="password" minLength={8} autoComplete="new-password" required value={password} onChange={e=>setPassword(e.target.value)} /></label>
+          <label>Confirm new password<input type="password" minLength={8} autoComplete="new-password" required value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} /></label>
+          <button className="primaryBtn" disabled={busy} type="submit"><KeyRound size={16}/> {busy ? "Updating…" : "Update password"}</button>
+        </form>}
+      </>}
+      {message && <p className="formMessage" aria-live="polite">{message}</p>}
     </div>
-  );
+  </div>;
 }

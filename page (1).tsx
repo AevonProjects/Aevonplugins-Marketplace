@@ -1,9 +1,11 @@
 "use client";
-import Link from "next/link";
-import { useEffect,useState } from "react";
-import { Download,Library,Loader2 } from "lucide-react";
+
+import { useEffect, useState } from "react";
+import { KeyRound } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-export default function LibraryPage(){const[items,setItems]=useState<any[]>([]);const[msg,setMsg]=useState("Loading…");const[busy,setBusy]=useState<string|null>(null);
-useEffect(()=>{(async()=>{if(!supabase)return setMsg("Supabase is not configured.");const{data:a}=await supabase.auth.getUser();if(!a.user)return setMsg("Sign in to view your plugin library.");const{data,error}=await supabase.from("user_plugins").select("id,access_type,created_at,plugins(id,name,slug,version,description,file_name)").order("created_at",{ascending:false});if(error)return setMsg(error.message);setItems(data??[]);setMsg(data?.length?"":"You don't have any plugins yet.")})()},[]);
-async function download(item:any){if(!supabase)return;setBusy(item.id);const{data:s}=await supabase.auth.getSession();const token=s.session?.access_token;const r=await fetch(`/api/plugins/${item.plugins.id}/download`,{method:"POST",headers:{Authorization:`Bearer ${token}`}});const j=await r.json();setBusy(null);if(!r.ok)return alert(j.error||"Download failed.");window.location.href=j.url;}
-return <div className="pageWrap"><p className="eyebrow">ACCOUNT</p><h1>My Library</h1><p className="muted">Plugins attached to your marketplace account.</p>{msg&&<div className="emptyCard"><Library size={24}/><span>{msg}</span></div>}<div className="grid">{items.map((item:any)=><article className="pluginCard" key={item.id}><div className="pluginIcon"><Library size={26}/></div><div className="pluginBody"><h3>{item.plugins?.name??"Plugin"}</h3><p>{item.plugins?.description??""}</p><span className="version">{item.access_type}</span><div className="libraryActions"><Link className="secondaryBtn" href={`/plugins/${item.plugins.slug}`}>View</Link><button className="primaryBtn" onClick={()=>download(item)} disabled={busy===item.id}>{busy===item.id?<Loader2 className="spin" size={15}/>:<Download size={15}/>} Download</button></div></div></article>)}</div></div>}
+
+export default function LicensesPage(){
+  const [rows,setRows]=useState<any[]>([]); const [message,setMessage]=useState("Loading…");
+  useEffect(()=>{(async()=>{if(!supabase)return setMessage("Supabase is not configured."); const {data:auth}=await supabase.auth.getUser(); if(!auth.user)return setMessage("Sign in to view your licenses."); const {data,error}=await supabase.from("licenses").select("id,license_key,status,download_count,last_download_at,plugins(name,version)").order("created_at",{ascending:false}); if(error)return setMessage(error.message); setRows(data??[]); setMessage(data?.length?"":"No licenses have been assigned to this account yet.");})()},[]);
+  return <div className="pageWrap"><p className="eyebrow">ACCOUNT</p><h1>Licenses</h1><p className="muted">Manage your Aevon plugin licenses.</p>{message&&<div className="emptyCard"><KeyRound size={24}/><span>{message}</span></div>}<div className="licenseList">{rows.map((r:any)=><div className="licenseRow" key={r.id}><div><strong>{r.plugins?.name??"Plugin"}</strong><span>{r.license_key}</span></div><div><span className="version">{r.status}</span><small>{r.download_count} downloads</small></div></div>)}</div></div>
+}
