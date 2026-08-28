@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Search, Package, ArrowRight, Sparkles, AlertTriangle, ChevronLeft, ChevronRight,
-  ShieldCheck, Zap, Headphones, BadgeCheck
+  ShieldCheck, Zap, Headphones, BadgeCheck, Server, Users, Copy, Check, MessageCircle, ExternalLink
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
@@ -25,6 +25,9 @@ export default function MarketplacePage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const railRef = useRef<HTMLDivElement>(null);
+  const [communityStatus, setCommunityStatus] = useState<any>(null);
+  const [statusLoading, setStatusLoading] = useState(true);
+  const [copiedIp, setCopiedIp] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -63,6 +66,33 @@ export default function MarketplacePage() {
 
   useEffect(() => setActiveIndex(0), [query]);
 
+  useEffect(() => {
+    let active = true;
+    async function loadCommunityStatus() {
+      try {
+        const response = await fetch("/api/community-status", { cache: "no-store" });
+        if (!response.ok) throw new Error("status unavailable");
+        const data = await response.json();
+        if (active) setCommunityStatus(data);
+      } catch {
+        if (active) setCommunityStatus(null);
+      } finally {
+        if (active) setStatusLoading(false);
+      }
+    }
+    void loadCommunityStatus();
+    const timer = window.setInterval(loadCommunityStatus, 45000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, []);
+
+  async function copyServerIp() {
+    try {
+      await navigator.clipboard.writeText("aevonsmp.online");
+      setCopiedIp(true);
+      window.setTimeout(() => setCopiedIp(false), 1800);
+    } catch {}
+  }
+
   function move(direction: number) {
     const rail = railRef.current;
     if (!rail || filtered.length === 0) return;
@@ -96,6 +126,60 @@ export default function MarketplacePage() {
           <div className="heroArtwork" aria-hidden="true">
             <img className="heroSmpLogo" src="/assets/aevon-smp.png" alt="" />
             <img className="heroBirdFloat" src="/assets/aevon-bird.png" alt="" />
+          </div>
+        </div>
+      </section>
+
+      <section className="communityStatusSection" aria-label="Aevon community live status">
+        <div className="communityStatusPanel">
+          <div className="communityStatusHeading">
+            <div>
+              <span className="sectionKicker">LIVE COMMUNITY</span>
+              <h2>AEVONSMP STATUS</h2>
+            </div>
+            <span className="statusRefreshNote">Auto-refreshes every 45 seconds</span>
+          </div>
+
+          <div className="communityStatusGrid">
+            <article className="liveStatusCard">
+              <div className="liveStatusIcon"><Server size={22}/></div>
+              <div className="liveStatusContent">
+                <div className="liveStatusTop">
+                  <div>
+                    <span className="liveStatusLabel">MINECRAFT SERVER</span>
+                    <strong>AevonSMP</strong>
+                  </div>
+                  <span className={`liveState ${communityStatus?.minecraft?.online ? "online" : "offline"}`}>
+                    <i /> {statusLoading ? "Checking…" : communityStatus?.minecraft?.online ? "Online" : "Offline"}
+                  </span>
+                </div>
+                <div className="liveStatusStats">
+                  <div><Users size={15}/><span><b>{communityStatus?.minecraft?.playersOnline ?? 0}</b>{communityStatus?.minecraft?.playersMax ? ` / ${communityStatus.minecraft.playersMax}` : ""} players online</span></div>
+                </div>
+                <div className="serverIpRow">
+                  <code>aevonsmp.online</code>
+                  <button type="button" onClick={copyServerIp}>{copiedIp ? <Check size={15}/> : <Copy size={15}/>} {copiedIp ? "Copied" : "Copy IP"}</button>
+                </div>
+              </div>
+            </article>
+
+            <article className="liveStatusCard discordStatusCard">
+              <div className="liveStatusIcon"><MessageCircle size={22}/></div>
+              <div className="liveStatusContent">
+                <div className="liveStatusTop">
+                  <div>
+                    <span className="liveStatusLabel">DISCORD COMMUNITY</span>
+                    <strong>{communityStatus?.discord?.name || "Aevon Discord"}</strong>
+                  </div>
+                  <span className={`liveState ${communityStatus?.discord?.available ? "online" : "offline"}`}><i /> {statusLoading ? "Checking…" : communityStatus?.discord?.available ? "Available" : "Unavailable"}</span>
+                </div>
+                <div className="discordStats">
+                  <div><b>{communityStatus?.discord?.online ?? 0}</b><span>Online</span></div>
+                  <div><b>{communityStatus?.discord?.members ?? 0}</b><span>Members</span></div>
+                </div>
+                <a className="joinDiscordBtn" href="https://discord.gg/kvPZ95ZsVk" target="_blank" rel="noreferrer">Join Discord <ExternalLink size={14}/></a>
+              </div>
+            </article>
           </div>
         </div>
       </section>
