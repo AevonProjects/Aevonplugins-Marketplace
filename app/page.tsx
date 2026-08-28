@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Search, Package, ArrowRight, Sparkles, AlertTriangle, ChevronLeft, ChevronRight,
-  ShieldCheck, Zap, Headphones, BadgeCheck, Server, Users, Copy, Check, MessageCircle, ExternalLink
+  ShieldCheck, Zap, Headphones, BadgeCheck, Server, Users, Copy, Check
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
@@ -81,7 +81,7 @@ export default function MarketplacePage() {
       }
     }
     void loadCommunityStatus();
-    const timer = window.setInterval(loadCommunityStatus, 45000);
+    const timer = window.setInterval(loadCommunityStatus, 10000);
     return () => { active = false; window.clearInterval(timer); };
   }, []);
 
@@ -130,57 +130,20 @@ export default function MarketplacePage() {
         </div>
       </section>
 
-      <section className="communityStatusSection" aria-label="Aevon community live status">
-        <div className="communityStatusPanel">
-          <div className="communityStatusHeading">
-            <div>
-              <span className="sectionKicker">LIVE COMMUNITY</span>
-              <h2>AEVONSMP STATUS</h2>
-            </div>
-            <span className="statusRefreshNote">Auto-refreshes every 45 seconds</span>
+      <section className="minecraftStatusStrip" aria-label="AevonSMP live server status">
+        <div className="minecraftStatusInner">
+          <div className="minecraftStatusIdentity">
+            <span className={`minecraftDot ${statusLoading ? "checking" : communityStatus?.minecraft?.available === false ? "unavailable" : communityStatus?.minecraft?.online ? "online" : "offline"}`} />
+            <strong>{statusLoading ? "Checking…" : communityStatus?.minecraft?.available === false ? "Status unavailable" : communityStatus?.minecraft?.online ? "Online" : "Offline"}</strong>
           </div>
-
-          <div className="communityStatusGrid">
-            <article className="liveStatusCard">
-              <div className="liveStatusIcon"><Server size={22}/></div>
-              <div className="liveStatusContent">
-                <div className="liveStatusTop">
-                  <div>
-                    <span className="liveStatusLabel">MINECRAFT SERVER</span>
-                    <strong>AevonSMP</strong>
-                  </div>
-                  <span className={`liveState ${communityStatus?.minecraft?.online ? "online" : "offline"}`}>
-                    <i /> {statusLoading ? "Checking…" : communityStatus?.minecraft?.online ? "Online" : "Offline"}
-                  </span>
-                </div>
-                <div className="liveStatusStats">
-                  <div><Users size={15}/><span><b>{communityStatus?.minecraft?.playersOnline ?? 0}</b>{communityStatus?.minecraft?.playersMax ? ` / ${communityStatus.minecraft.playersMax}` : ""} players online</span></div>
-                </div>
-                <div className="serverIpRow">
-                  <code>aevonsmp.online</code>
-                  <button type="button" onClick={copyServerIp}>{copiedIp ? <Check size={15}/> : <Copy size={15}/>} {copiedIp ? "Copied" : "Copy IP"}</button>
-                </div>
-              </div>
-            </article>
-
-            <article className="liveStatusCard discordStatusCard">
-              <div className="liveStatusIcon"><MessageCircle size={22}/></div>
-              <div className="liveStatusContent">
-                <div className="liveStatusTop">
-                  <div>
-                    <span className="liveStatusLabel">DISCORD COMMUNITY</span>
-                    <strong>{communityStatus?.discord?.name || "Aevon Discord"}</strong>
-                  </div>
-                  <span className={`liveState ${communityStatus?.discord?.available ? "online" : "offline"}`}><i /> {statusLoading ? "Checking…" : communityStatus?.discord?.available ? "Available" : "Unavailable"}</span>
-                </div>
-                <div className="discordStats">
-                  <div><b>{communityStatus?.discord?.online ?? 0}</b><span>Online</span></div>
-                  <div><b>{communityStatus?.discord?.members ?? 0}</b><span>Members</span></div>
-                </div>
-                <a className="joinDiscordBtn" href="https://discord.gg/kvPZ95ZsVk" target="_blank" rel="noreferrer">Join Discord <ExternalLink size={14}/></a>
-              </div>
-            </article>
+          <button className="minecraftIpButton" type="button" onClick={copyServerIp} title="Copy server IP">
+            <Server size={13}/><span>aevonsmp.online</span>{copiedIp ? <Check size={13}/> : <Copy size={13}/>}
+          </button>
+          <div className="minecraftPlayers">
+            <Users size={14}/>
+            <span>{statusLoading || communityStatus?.minecraft?.available === false ? "—" : <><b>{communityStatus?.minecraft?.playersOnline ?? 0}</b>{communityStatus?.minecraft?.playersMax ? ` / ${communityStatus.minecraft.playersMax}` : ""}</>} <em>players online</em></span>
           </div>
+          <span className="minecraftRefresh">Live • 10s</span>
         </div>
       </section>
 
