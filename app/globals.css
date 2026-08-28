@@ -74,3 +74,12 @@ html{scroll-behavior:smooth}body{background:#030b13}.shell{display:block;min-hei
 .minecraftIpButton{border:0;background:transparent;color:#d8effc;display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:7px;cursor:pointer;font:inherit}.minecraftIpButton:hover{background:rgba(77,159,209,.09);color:#fff}.minecraftIpButton span{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;font-weight:750}
 .minecraftPlayers{display:flex;align-items:center;gap:6px;color:#8eacbe}.minecraftPlayers b{color:#e7f7ff}.minecraftPlayers em{font-style:normal;color:#728fa1}.minecraftRefresh{font-size:8px;color:#587486;letter-spacing:.04em}
 @media(max-width:700px){.minecraftStatusStrip{padding:0 12px}.minecraftStatusInner{justify-content:center;gap:8px;flex-wrap:wrap;padding:7px 0}.minecraftRefresh{display:none}.minecraftPlayers em{display:none}.minecraftIpButton{padding:4px}.minecraftStatusIdentity strong{font-size:8px}}
+
+/* Compact Minecraft status tucked beneath the right-side header navigation */
+.siteHeaderInner{position:relative;padding-bottom:22px}
+.headerMinecraftStatus{position:absolute;right:0;bottom:2px;display:flex;align-items:center;gap:8px;min-width:430px;justify-content:flex-end;padding-top:5px;border-top:1px solid rgba(126,196,238,.10);color:rgba(196,220,233,.78);font-size:9px;line-height:1;letter-spacing:.015em;white-space:nowrap;pointer-events:auto}
+.headerMinecraftDot{width:6px;height:6px;border-radius:50%;background:#71828c;box-shadow:0 0 0 3px rgba(113,130,140,.06)}.headerMinecraftDot.online{background:#42d98d;box-shadow:0 0 8px rgba(66,217,141,.35)}.headerMinecraftDot.offline{background:#d56d6d}.headerMinecraftDot.checking,.headerMinecraftDot.unavailable{background:#ddb45f}
+.headerMinecraftStatus strong{font-size:8px;letter-spacing:.09em;color:rgba(213,237,248,.88)}
+.headerMinecraftStatus button{border:0;background:transparent;padding:2px 3px;display:inline-flex;align-items:center;gap:4px;color:#e5f5ff;cursor:pointer;font:inherit}.headerMinecraftStatus button:hover{color:#fff;text-shadow:0 0 10px rgba(114,205,255,.35)}.headerMinecraftStatus button span{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:9px;font-weight:800}
+.headerMinecraftPlayers{display:inline-flex;align-items:center;gap:4px;color:rgba(174,205,221,.78)}.headerMinecraftPlayers b{color:#edf9ff;font-size:10px}
+@media(max-width:900px){.siteHeaderInner{padding-bottom:0}.headerMinecraftStatus{display:none}}

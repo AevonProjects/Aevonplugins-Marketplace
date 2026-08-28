@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Search, Package, ArrowRight, Sparkles, AlertTriangle, ChevronLeft, ChevronRight,
-  ShieldCheck, Zap, Headphones, BadgeCheck, Server, Users, Copy, Check
+  ShieldCheck, Zap, Headphones, BadgeCheck
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
@@ -25,9 +25,6 @@ export default function MarketplacePage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const railRef = useRef<HTMLDivElement>(null);
-  const [communityStatus, setCommunityStatus] = useState<any>(null);
-  const [statusLoading, setStatusLoading] = useState(true);
-  const [copiedIp, setCopiedIp] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -66,33 +63,6 @@ export default function MarketplacePage() {
 
   useEffect(() => setActiveIndex(0), [query]);
 
-  useEffect(() => {
-    let active = true;
-    async function loadCommunityStatus() {
-      try {
-        const response = await fetch("/api/community-status", { cache: "no-store" });
-        if (!response.ok) throw new Error("status unavailable");
-        const data = await response.json();
-        if (active) setCommunityStatus(data);
-      } catch {
-        if (active) setCommunityStatus(null);
-      } finally {
-        if (active) setStatusLoading(false);
-      }
-    }
-    void loadCommunityStatus();
-    const timer = window.setInterval(loadCommunityStatus, 10000);
-    return () => { active = false; window.clearInterval(timer); };
-  }, []);
-
-  async function copyServerIp() {
-    try {
-      await navigator.clipboard.writeText("aevonsmp.online");
-      setCopiedIp(true);
-      window.setTimeout(() => setCopiedIp(false), 1800);
-    } catch {}
-  }
-
   function move(direction: number) {
     const rail = railRef.current;
     if (!rail || filtered.length === 0) return;
@@ -127,23 +97,6 @@ export default function MarketplacePage() {
             <img className="heroSmpLogo" src="/assets/aevon-smp.png" alt="" />
             <img className="heroBirdFloat" src="/assets/aevon-bird.png" alt="" />
           </div>
-        </div>
-      </section>
-
-      <section className="minecraftStatusStrip" aria-label="AevonSMP live server status">
-        <div className="minecraftStatusInner">
-          <div className="minecraftStatusIdentity">
-            <span className={`minecraftDot ${statusLoading ? "checking" : communityStatus?.minecraft?.available === false ? "unavailable" : communityStatus?.minecraft?.online ? "online" : "offline"}`} />
-            <strong>{statusLoading ? "Checking…" : communityStatus?.minecraft?.available === false ? "Status unavailable" : communityStatus?.minecraft?.online ? "Online" : "Offline"}</strong>
-          </div>
-          <button className="minecraftIpButton" type="button" onClick={copyServerIp} title="Copy server IP">
-            <Server size={13}/><span>aevonsmp.online</span>{copiedIp ? <Check size={13}/> : <Copy size={13}/>}
-          </button>
-          <div className="minecraftPlayers">
-            <Users size={14}/>
-            <span>{statusLoading || communityStatus?.minecraft?.available === false ? "—" : <><b>{communityStatus?.minecraft?.playersOnline ?? 0}</b>{communityStatus?.minecraft?.playersMax ? ` / ${communityStatus.minecraft.playersMax}` : ""}</>} <em>players online</em></span>
-          </div>
-          <span className="minecraftRefresh">Live • 10s</span>
         </div>
       </section>
 

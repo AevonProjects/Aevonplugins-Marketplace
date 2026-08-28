@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Home, Library, KeyRound, ShieldCheck, LogIn, Menu, X, ChevronDown, LogOut, UserRound } from "lucide-react";
+import { Home, Library, KeyRound, ShieldCheck, LogIn, Menu, X, ChevronDown, LogOut, UserRound, Users, Copy, Check } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import type { Session } from "@supabase/supabase-js";
@@ -23,6 +23,9 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const accountRef = useRef<HTMLDivElement>(null);
+  const [serverStatus, setServerStatus] = useState<any>(null);
+  const [serverStatusLoading, setServerStatusLoading] = useState(true);
+  const [copiedIp, setCopiedIp] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -81,6 +84,33 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     document.addEventListener("mousedown", closeAccount);
     return () => document.removeEventListener("mousedown", closeAccount);
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    async function refreshServerStatus() {
+      try {
+        const response = await fetch("/api/community-status", { cache: "no-store" });
+        if (!response.ok) throw new Error("status unavailable");
+        const data = await response.json();
+        if (active) setServerStatus(data?.minecraft ?? null);
+      } catch {
+        if (active) setServerStatus(null);
+      } finally {
+        if (active) setServerStatusLoading(false);
+      }
+    }
+    void refreshServerStatus();
+    const timer = window.setInterval(refreshServerStatus, 10000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, []);
+
+  async function copyServerIp() {
+    try {
+      await navigator.clipboard.writeText("aevonsmp.online");
+      setCopiedIp(true);
+      window.setTimeout(() => setCopiedIp(false), 1600);
+    } catch {}
+  }
 
   async function signOut() {
     setAccountOpen(false);
@@ -158,6 +188,14 @@ export default function Shell({ children }: { children: React.ReactNode }) {
               </Link>
             )}
           </nav>
+          <div className="headerMinecraftStatus" aria-label="AevonSMP live server status">
+            <span className={`headerMinecraftDot ${serverStatusLoading ? "checking" : serverStatus?.available === false || !serverStatus ? "unavailable" : serverStatus?.online ? "online" : "offline"}`} />
+            <strong>{serverStatusLoading ? "CHECKING…" : serverStatus?.available === false || !serverStatus ? "STATUS UNAVAILABLE" : serverStatus?.online ? "ONLINE" : "OFFLINE"}</strong>
+            <button type="button" onClick={copyServerIp} title="Copy server IP">
+              <span>aevonsmp.online</span>{copiedIp ? <Check size={11}/> : <Copy size={11}/>}
+            </button>
+            <span className="headerMinecraftPlayers"><Users size={12}/><b>{serverStatusLoading || !serverStatus?.available ? "—" : serverStatus?.playersOnline ?? 0}</b>{serverStatus?.available && serverStatus?.playersMax ? ` / ${serverStatus.playersMax}` : ""} Players</span>
+          </div>
         </div>
       </header>
 
