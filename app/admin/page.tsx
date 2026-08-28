@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import RichTextEditor from "@/components/RichTextEditor";
+import AdminVerificationPanel from "@/components/AdminVerificationPanel";
 
 type PluginRow = {
   id: string;
@@ -522,6 +523,7 @@ export default function AdminPage() {
           </section>
         </>
       )}
+      {allowed && <AdminVerificationPanel />}
     </div>
   );
 }

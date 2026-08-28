@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { paymentConfig } from "@/lib/paymentConfig";
+import PluginReviews from "@/components/PluginReviews";
 
 type PluginRow = {
   id: string;
@@ -349,6 +350,8 @@ export default function PluginDetailPage() {
           )}
         </aside>
       </div>
+
+      <PluginReviews pluginId={plugin.id} owned={owned} signedIn={signedIn} />
 
       {showPayment && (
         <div className="paymentModalBackdrop" onMouseDown={(e) => { if (e.currentTarget === e.target) setShowPayment(false); }}>

@@ -22,6 +22,8 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   const [isAdmin, setIsAdmin] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [authReady, setAuthReady] = useState(false);
+  const [nickname, setNickname] = useState<string | null>(null);
+  const [fullyVerified, setFullyVerified] = useState(false);
   const accountRef = useRef<HTMLDivElement>(null);
   const [serverStatus, setServerStatus] = useState<any>(null);
   const [serverStatusLoading, setServerStatusLoading] = useState(true);
@@ -38,12 +40,14 @@ export default function Shell({ children }: { children: React.ReactNode }) {
 
       const { data, error } = await supabase
         .from("profiles")
-        .select("role")
+        .select("role,nickname,verification_status")
         .eq("id", userId)
         .maybeSingle();
 
       if (!active) return;
       setIsAdmin(!error && data?.role === "admin");
+      setNickname(data?.nickname ?? null);
+      setFullyVerified(data?.verification_status === "verified");
     }
 
     async function applySession(session: Session | null) {
@@ -167,16 +171,19 @@ export default function Shell({ children }: { children: React.ReactNode }) {
               <div className="accountMenu" ref={accountRef}>
                 <button className="siteNavItem accountButton" type="button" onClick={() => setAccountOpen(v => !v)} aria-expanded={accountOpen}>
                   <UserRound size={16} />
-                  <span className="accountEmail">{userEmail}</span>
+                  <span className="accountEmail">{nickname || userEmail}</span>{fullyVerified && <ShieldCheck size={13} className="verifiedBadge"/>}
                   <ChevronDown size={14} />
                 </button>
                 {accountOpen && (
                   <div className="accountDropdown">
                     <div className="accountDropdownIdentity">
                       <small>Signed in as</small>
-                      <strong>{userEmail}</strong>
+                      <strong>{nickname || userEmail}</strong>
+                      {fullyVerified && <span className="dropdownVerified">✓ Fully Verified</span>}
                     </div>
-                    <Link href="/login" onClick={() => {setOpen(false);setAccountOpen(false)}}><UserRound size={15}/> Account</Link>
+                    <Link href="/account" onClick={() => {setOpen(false);setAccountOpen(false)}}><UserRound size={15}/> Profile / My Account</Link>
+                    <Link href="/account#purchased" onClick={() => {setOpen(false);setAccountOpen(false)}}><Library size={15}/> Purchased Plugins</Link>
+                    <Link href="/account#verification" onClick={() => {setOpen(false);setAccountOpen(false)}}><ShieldCheck size={15}/> Verify Account</Link>
                     <button type="button" onClick={signOut}><LogOut size={15}/> Sign out</button>
                   </div>
                 )}
