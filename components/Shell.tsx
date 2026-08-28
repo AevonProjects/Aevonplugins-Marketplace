@@ -6,6 +6,7 @@ import { Home, Library, KeyRound, ShieldCheck, LogIn, Menu, X, ChevronDown, LogO
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import type { Session } from "@supabase/supabase-js";
+import BackgroundMusic from "@/components/BackgroundMusic";
 
 const baseLinks = [
   { href: "/", label: "Marketplace", icon: Home },
@@ -161,6 +162,8 @@ export default function Shell({ children }: { children: React.ReactNode }) {
       </header>
 
       <main className="main">{children}</main>
+
+      <BackgroundMusic />
 
       <footer className="siteFooter">
         <div className="siteFooterInner">

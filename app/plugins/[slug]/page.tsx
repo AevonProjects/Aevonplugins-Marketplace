@@ -252,7 +252,7 @@ export default function PluginDetailPage() {
           {(plugin.gallery_images?.length ?? 0) > 0 ? (
             <section className="resourceGallery">
               <div className="resourceGalleryFrame">
-                <img src={plugin.gallery_images![galleryIndex]} alt={`${plugin.name} screenshot ${galleryIndex + 1}`} />
+                <img key={`${plugin.id}-${galleryIndex}`} className="resourceGalleryImage" src={plugin.gallery_images![galleryIndex]} alt={`${plugin.name} screenshot ${galleryIndex + 1}`} />
                 {plugin.gallery_images!.length > 1 && <>
                   <button className="galleryNav galleryPrev" onClick={()=>setGalleryIndex((galleryIndex-1+plugin.gallery_images!.length)%plugin.gallery_images!.length)} aria-label="Previous image"><ChevronLeft/></button>
                   <button className="galleryNav galleryNext" onClick={()=>setGalleryIndex((galleryIndex+1)%plugin.gallery_images!.length)} aria-label="Next image"><ChevronRight/></button>
