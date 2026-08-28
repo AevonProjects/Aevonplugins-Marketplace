@@ -151,14 +151,16 @@ export default function AdminPage() {
         return;
       }
 
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", auth.user.id)
-        .single();
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      const roleResponse = await fetch("/api/account/me", {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        cache: "no-store",
+      });
+      const rolePayload = await roleResponse.json().catch(() => ({}));
 
-      if (error || data?.role !== "admin") {
-        setNotice({ type: "error", text: "This account does not have admin access." });
+      if (!roleResponse.ok || rolePayload?.profile?.role !== "admin") {
+        setNotice({ type: "error", text: rolePayload?.error || "This account does not have admin access." });
         setChecking(false);
         return;
       }

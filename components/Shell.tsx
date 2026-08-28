@@ -32,29 +32,29 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let active = true;
 
-    async function refreshRole(userId?: string) {
-      if (!active || !supabase || !userId) {
-        if (active) setIsAdmin(false);
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("role,nickname,verification_status")
-        .eq("id", userId)
-        .maybeSingle();
-
-      if (!active) return;
-      setIsAdmin(!error && data?.role === "admin");
-      setNickname(data?.nickname ?? null);
-      setFullyVerified(data?.verification_status === "verified");
-    }
-
     async function applySession(session: Session | null) {
       if (!active) return;
       setUserEmail(session?.user.email ?? null);
       setIsAdmin(false);
-      await refreshRole(session?.user.id);
+      setNickname(null);
+      setFullyVerified(false);
+
+      if (session?.access_token) {
+        try {
+          const response = await fetch("/api/account/me", {
+            headers: { Authorization: `Bearer ${session.access_token}` },
+            cache: "no-store",
+          });
+          const data = await response.json();
+          if (active && response.ok) {
+            setIsAdmin(data?.profile?.role === "admin");
+            setNickname(data?.profile?.nickname ?? null);
+            setFullyVerified(data?.profile?.verification_status === "verified");
+          }
+        } catch {
+          // Keep the rest of the header usable even if account metadata is temporarily unavailable.
+        }
+      }
       if (active) setAuthReady(true);
     }
 
@@ -158,7 +158,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
               <Link
                 href="/admin"
                 onClick={() => setOpen(false)}
-                className={pathname === "/admin" ? "siteNavItem active" : "siteNavItem"}
+                className={pathname.startsWith("/admin") ? "siteNavItem active" : "siteNavItem"}
               >
                 <ShieldCheck size={16} />
                 <span>Admin</span>
