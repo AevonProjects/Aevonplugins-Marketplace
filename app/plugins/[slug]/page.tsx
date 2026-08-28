@@ -223,141 +223,132 @@ export default function PluginDetailPage() {
   const price = Number(plugin.price || 0);
 
   return (
-    <div className="pageWrap pluginDetailWrap">
-      <Link className="backLink" href="/"><ArrowLeft size={16} /> Back to Marketplace</Link>
+    <div className="pageWrap pluginDetailWrap pluginResourceView">
+      <Link className="backLink resourceBackLink" href="/"><ArrowLeft size={16} /> Back to Marketplace</Link>
 
-      <section className="pluginDetailHero">
-        <div className="pluginDetailIcon"><Package size={38} /></div>
-        <div className="pluginDetailIntro">
-          <div className="detailBadges">
-            <span className="version">v{plugin.version || "1.0.0"}</span>
-            <span className="statusBadge published"><BadgeCheck size={12} /> Published</span>
+      <header className="resourcePluginHeader">
+        <div className="resourceTitleBlock">
+          <div className="resourceTitleLine">
+            <h1>{plugin.name}</h1>
+            <span className="resourceVersion">v{plugin.version || "1.0.0"}</span>
           </div>
-          <h1>{plugin.name}</h1>
-          <p>{plugin.description || "Official Aevon plugin."}</p>
+          <div className="resourceSubline">
+            <BadgeCheck size={14} /> Official Aevon Marketplace Plugin
+            <span>•</span>
+            <span>Published</span>
+          </div>
         </div>
-        <div className="detailPriceCard">
-          <span>Price</span>
-          <strong>{price > 0 ? `₱${price.toLocaleString()}` : "Free"}</strong>
-        </div>
-      </section>
+      </header>
 
-      {(plugin.gallery_images?.length ?? 0) > 0 && (
-        <section className="pluginGallerySection">
-          <div className="pluginGalleryFrame">
-            <img src={plugin.gallery_images![galleryIndex]} alt={`${plugin.name} screenshot ${galleryIndex + 1}`} />
-            {plugin.gallery_images!.length > 1 && <>
-              <button className="galleryNav galleryPrev" onClick={()=>setGalleryIndex((galleryIndex-1+plugin.gallery_images!.length)%plugin.gallery_images!.length)} aria-label="Previous image"><ChevronLeft/></button>
-              <button className="galleryNav galleryNext" onClick={()=>setGalleryIndex((galleryIndex+1)%plugin.gallery_images!.length)} aria-label="Next image"><ChevronRight/></button>
-            </>}
-          </div>
-          <div className="galleryDots">{plugin.gallery_images!.map((_,i)=><button key={i} className={i===galleryIndex?"active":""} onClick={()=>setGalleryIndex(i)} aria-label={`Show image ${i+1}`}/>)}</div>
-        </section>
-      )}
+      <nav className="resourceTabs" aria-label="Plugin navigation">
+        <a className="active" href="#overview">Overview</a>
+        {plugin.wiki_url && <a href={plugin.wiki_url} target="_blank" rel="noreferrer">Wiki <ExternalLink size={12}/></a>}
+        {plugin.youtube_url && <a href={plugin.youtube_url} target="_blank" rel="noreferrer">YouTube Tutorial <ExternalLink size={12}/></a>}
+        {plugin.discord_url && <a href={plugin.discord_url} target="_blank" rel="noreferrer">Discord <ExternalLink size={12}/></a>}
+      </nav>
 
-      <section className="pluginFullDescription detailPanel">
-        <div className="detailSectionTitle"><Package size={19}/><div><h2>About {plugin.name}</h2><p>Complete plugin information and features.</p></div></div>
-        {plugin.description_html ? <div className="richPluginDescription" dangerouslySetInnerHTML={{__html:plugin.description_html}}/> : <p className="richPluginDescription">{plugin.description || "Official Aevon plugin."}</p>}
-      </section>
-
-      {(plugin.wiki_url || plugin.youtube_url || plugin.discord_url) && <section className="pluginResourceLinks">
-        {plugin.wiki_url && <a href={plugin.wiki_url} target="_blank" rel="noreferrer"><BookOpen size={19}/><span><strong>Plugin Wiki</strong><small>Documentation & commands</small></span><ExternalLink size={14}/></a>}
-        {plugin.youtube_url && <a href={plugin.youtube_url} target="_blank" rel="noreferrer"><Youtube size={19}/><span><strong>YouTube Tutorial</strong><small>Watch the setup guide</small></span><ExternalLink size={14}/></a>}
-        {plugin.discord_url && <a href={plugin.discord_url} target="_blank" rel="noreferrer"><MessageCircle size={19}/><span><strong>Discord</strong><small>Support & community</small></span><ExternalLink size={14}/></a>}
-      </section>}
-
-      <div className="detailGrid">
-        <section className="detailPanel">
-          <div className="detailSectionTitle">
-            <ShieldCheck size={19} />
-            <div>
-              <h2>Plugin Access</h2>
-              <p>Your marketplace ownership and license status.</p>
-            </div>
-          </div>
-
-          {!signedIn ? (
-            <div className="accessState">
-              <LockKeyhole size={22} />
-              <div>
-                <strong>Sign in to check access</strong>
-                <p>Log in to view ownership, licenses, and future downloads for this plugin.</p>
+      <div className="resourcePluginLayout" id="overview">
+        <main className="resourceMainColumn">
+          {(plugin.gallery_images?.length ?? 0) > 0 ? (
+            <section className="resourceGallery">
+              <div className="resourceGalleryFrame">
+                <img src={plugin.gallery_images![galleryIndex]} alt={`${plugin.name} screenshot ${galleryIndex + 1}`} />
+                {plugin.gallery_images!.length > 1 && <>
+                  <button className="galleryNav galleryPrev" onClick={()=>setGalleryIndex((galleryIndex-1+plugin.gallery_images!.length)%plugin.gallery_images!.length)} aria-label="Previous image"><ChevronLeft/></button>
+                  <button className="galleryNav galleryNext" onClick={()=>setGalleryIndex((galleryIndex+1)%plugin.gallery_images!.length)} aria-label="Next image"><ChevronRight/></button>
+                </>}
               </div>
-              <Link className="primaryBtn" href="/login">Login</Link>
-            </div>
-          ) : owned ? (
-            <div className="accessState successAccess">
-              <BadgeCheck size={22} />
-              <div>
-                <strong>You own this plugin</strong>
-                <p>Access type: {access?.access_type || "assigned"}</p>
-              </div>
-              <span className="ownedPill">Owned</span>
-            </div>
+              {plugin.gallery_images!.length > 1 && <div className="resourceGalleryControls">
+                <span>{galleryIndex + 1} / {plugin.gallery_images!.length}</span>
+                <div className="galleryDots">{plugin.gallery_images!.map((_,i)=><button key={i} className={i===galleryIndex?"active":""} onClick={()=>setGalleryIndex(i)} aria-label={`Show image ${i+1}`}/>)}</div>
+              </div>}
+            </section>
           ) : (
-            <div className="accessState">
-              <ShoppingCart size={22} />
-              <div>
-                <strong>{price > 0 ? "Not purchased yet" : "Access not assigned yet"}</strong>
-                <p>{price > 0 ? "Choose a payment method below to purchase this plugin." : "Free-plugin claiming will be connected in the next marketplace stage."}</p>
+            <section className="resourceGalleryEmpty">
+              <Package size={42}/>
+              <strong>{plugin.name}</strong>
+              <span>Plugin preview images will appear here.</span>
+            </section>
+          )}
+
+          <article className="resourceDescriptionPanel">
+            <div className="resourceSectionHeading">
+              <h2>Description</h2>
+              <span>Everything you need to know about {plugin.name}</span>
+            </div>
+            {plugin.description_html
+              ? <div className="richPluginDescription" dangerouslySetInnerHTML={{__html:plugin.description_html}}/>
+              : <p className="richPluginDescription">{plugin.description || "Official Aevon plugin."}</p>}
+          </article>
+        </main>
+
+        <aside className="resourceSidebar">
+          <section className="resourcePurchaseCard">
+            <div className="resourcePriceRow">
+              <span>{owned ? "Your access" : "Plugin price"}</span>
+              <strong>{price > 0 ? `₱${price.toLocaleString()}` : "Free"}</strong>
+            </div>
+
+            {!signedIn ? (
+              <>
+                <button className="pluginActionBtn lockedAction" disabled><LockKeyhole size={18}/> LOGIN / REGISTER</button>
+                <p className="resourceActionHint">Create an account or sign in before purchasing or downloading plugins.</p>
+              </>
+            ) : owned ? (
+              <>
+                <button className="pluginActionBtn ownedDownloadAction" disabled={actionBusy} onClick={downloadPlugin}>
+                  <Download size={18}/>{actionBusy ? "PREPARING DOWNLOAD…" : "DOWNLOAD NOW"}
+                </button>
+                <div className="resourceOwnedState"><BadgeCheck size={16}/><span>Purchased / Owned</span></div>
+              </>
+            ) : price > 0 ? (
+              <>
+                <button className="pluginActionBtn purchaseAction" disabled={actionBusy} onClick={()=>setShowPayment(true)}>
+                  <ShoppingCart size={18}/> PURCHASE PLUGIN
+                </button>
+                <p className="resourceActionHint">Choose GCash at checkout. PayPal automatic checkout will be added separately.</p>
+              </>
+            ) : (
+              <button className="pluginActionBtn purchaseAction" disabled={actionBusy} onClick={claimFree}>
+                <ShoppingCart size={18}/>{actionBusy ? "ADDING…" : "CLAIM FREE PLUGIN"}
+              </button>
+            )}
+
+            {actionMessage && <p className="muted actionMessage">{actionMessage}</p>}
+          </section>
+
+          {signedIn && owned && license && (
+            <section className="resourceSideCard">
+              <h3><KeyRound size={16}/> License</h3>
+              <div className="resourceSideFacts">
+                <div><span>Status</span><strong className={`licenseStatus ${license.status}`}>{license.status}</strong></div>
+                <div className="wideFact"><span>License Key</span><code>{license.license_key}</code></div>
+                <div><span>Downloads</span><strong>{license.download_count}</strong></div>
+                <div><span>Last Download</span><strong>{license.last_download_at ? new Date(license.last_download_at).toLocaleDateString() : "Never"}</strong></div>
               </div>
-              {price > 0 ? <button className="primaryBtn" onClick={() => setShowPayment(true)}>Choose Payment</button> : <button className="primaryBtn" onClick={claimFree} disabled={actionBusy}>{actionBusy ? "Claiming…" : "Add to Library"}</button>}
+            </section>
+          )}
+
+          <section className="resourceSideCard">
+            <h3><ShieldCheck size={16}/> Plugin Information</h3>
+            <div className="resourceInfoList">
+              <div><span>Version</span><strong>{plugin.version || "1.0.0"}</strong></div>
+              <div><span>Status</span><strong className="resourcePublished">Published</strong></div>
+              <div><span>Updated</span><strong>{new Date(plugin.updated_at).toLocaleDateString()}</strong></div>
+              <div><span>Type</span><strong>Aevon Plugin</strong></div>
             </div>
+          </section>
+
+          {(plugin.wiki_url || plugin.youtube_url || plugin.discord_url) && (
+            <section className="resourceSideCard resourceLinksCard">
+              <h3><ExternalLink size={16}/> Resources</h3>
+              {plugin.wiki_url && <a href={plugin.wiki_url} target="_blank" rel="noreferrer"><BookOpen size={16}/><span>Plugin Wiki</span><ExternalLink size={12}/></a>}
+              {plugin.youtube_url && <a href={plugin.youtube_url} target="_blank" rel="noreferrer"><Youtube size={16}/><span>YouTube Tutorial</span><ExternalLink size={12}/></a>}
+              {plugin.discord_url && <a href={plugin.discord_url} target="_blank" rel="noreferrer"><MessageCircle size={16}/><span>Discord Support</span><ExternalLink size={12}/></a>}
+            </section>
           )}
-
-          {signedIn && owned && (
-            <div className="licenseDetailBox">
-              <div className="licenseDetailTitle"><KeyRound size={18} /><strong>License</strong></div>
-              {license ? (
-                <div className="licenseDetailGrid">
-                  <div><span>Status</span><strong className={`licenseStatus ${license.status}`}>{license.status}</strong></div>
-                  <div><span>License Key</span><code>{license.license_key}</code></div>
-                  <div><span>Downloads</span><strong>{license.download_count}</strong></div>
-                  <div><span>Last Download</span><strong>{license.last_download_at ? new Date(license.last_download_at).toLocaleString() : "Never"}</strong></div>
-                </div>
-              ) : (
-                <p className="muted licenseEmpty">Ownership exists, but no license record has been issued yet.</p>
-              )}
-            </div>
-          )}
-
-          {actionMessage && <p className="muted actionMessage">{actionMessage}</p>}
-
-          {!signedIn ? (
-            <button className="pluginActionBtn lockedAction" disabled>
-              <LockKeyhole size={18} /> LOGIN / REGISTER TO DOWNLOAD
-            </button>
-          ) : owned ? (
-            <button className="pluginActionBtn ownedDownloadAction" disabled={actionBusy} onClick={downloadPlugin}>
-              <Download size={18} /> {actionBusy ? "PREPARING DOWNLOAD…" : "DOWNLOAD"}
-            </button>
-          ) : price > 0 ? (
-            <button
-              className="pluginActionBtn purchaseAction"
-              disabled={actionBusy}
-              onClick={() => setShowPayment(true)}
-            >
-              <ShoppingCart size={18} /> PURCHASE PLUGIN
-            </button>
-          ) : (
-            <button className="pluginActionBtn purchaseAction" disabled={actionBusy} onClick={claimFree}>
-              <ShoppingCart size={18} /> {actionBusy ? "ADDING TO LIBRARY…" : "CLAIM FREE PLUGIN"}
-            </button>
-          )}
-        </section>
-
-        <aside className="detailPanel detailsAside">
-          <h2>Plugin Details</h2>
-          <div className="detailFacts">
-            <div><span>Name</span><strong>{plugin.name}</strong></div>
-            <div><span>Version</span><strong>{plugin.version || "1.0.0"}</strong></div>
-            <div><span>Slug</span><code>{plugin.slug}</code></div>
-            <div><span>Status</span><strong>Published</strong></div>
-            <div><span>Updated</span><strong>{new Date(plugin.updated_at).toLocaleDateString()}</strong></div>
-          </div>
         </aside>
       </div>
-
 
       {showPayment && (
         <div className="paymentModalBackdrop" onMouseDown={(e) => { if (e.currentTarget === e.target) setShowPayment(false); }}>
