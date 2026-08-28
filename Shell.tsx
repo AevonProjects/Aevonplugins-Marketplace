@@ -34,20 +34,35 @@ export default function Shell({ children }: { children: React.ReactNode }) {
 
     async function refreshRole(userId?: string) {
       if (!active || !supabase || !userId) {
-        if (active) setIsAdmin(false);
+        if (active) {
+          setIsAdmin(false);
+          setNickname(null);
+          setFullyVerified(false);
+        }
         return;
       }
 
-      const { data, error } = await supabase
+      // Keep Admin visibility dependent ONLY on the long-standing `role` column.
+      // Newer optional profile fields (nickname / verification_status) must never
+      // be able to hide the Admin tab if their migration is missing or delayed.
+      const { data: roleData, error: roleError } = await supabase
         .from("profiles")
-        .select("role,nickname,verification_status")
+        .select("role")
         .eq("id", userId)
         .maybeSingle();
 
       if (!active) return;
-      setIsAdmin(!error && data?.role === "admin");
-      setNickname(data?.nickname ?? null);
-      setFullyVerified(data?.verification_status === "verified");
+      setIsAdmin(!roleError && roleData?.role === "admin");
+
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("nickname,verification_status")
+        .eq("id", userId)
+        .maybeSingle();
+
+      if (!active) return;
+      setNickname(profileData?.nickname ?? null);
+      setFullyVerified(profileData?.verification_status === "verified");
     }
 
     async function applySession(session: Session | null) {
@@ -158,7 +173,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
               <Link
                 href="/admin"
                 onClick={() => setOpen(false)}
-                className={pathname === "/admin" ? "siteNavItem active" : "siteNavItem"}
+                className={pathname.startsWith("/admin") ? "siteNavItem active" : "siteNavItem"}
               >
                 <ShieldCheck size={16} />
                 <span>Admin</span>
