@@ -5,12 +5,13 @@ import { Activity, Server, Users, LoaderCircle } from "lucide-react";
 
 type Point = { date: string; servers: number; players: number };
 type Payload = {
+  product?: string;
   totals: { totalServers: number; activeServers: number; uniquePlayers: number };
   series: Point[];
   activeWindowDays: number;
 };
 
-function ServerTrendChart({ data }: { data: Point[] }) {
+function ServerTrendChart({ data, product }: { data: Point[]; product: string }) {
   const width = 900, height = 230, left = 42, right = 18, top = 18, bottom = 32;
   const values = data.map((d) => d.servers);
   const max = Math.max(1, ...values);
@@ -28,11 +29,11 @@ function ServerTrendChart({ data }: { data: Point[] }) {
       <div className="serverUsageChartHeader">
         <div>
           <span>SERVER ADOPTION TREND</span>
-          <strong>Servers currently using ALicense</strong>
+          <strong>Servers currently using {product}</strong>
         </div>
         <small>Peak {max.toLocaleString()} server{max === 1 ? "" : "s"}</small>
       </div>
-      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="ALicense server usage over the last 30 days">
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${product} server usage over the last 30 days`}>
         <line x1={left} y1={height-bottom} x2={width-right} y2={height-bottom} className="usageAxis" />
         <line x1={left} y1={top} x2={left} y2={height-bottom} className="usageAxis" />
         <polyline points={path} className="usageLine servers" fill="none" />
@@ -73,14 +74,15 @@ export default function PluginUsageStats({ pluginId }: { pluginId: string }) {
   }, [pluginId]);
 
   const hasActivity = useMemo(() => Boolean(data && data.series.some((p) => p.servers > 0)), [data]);
+  const product = data?.product || "Plugin";
 
   return (
     <section className="pluginUsagePanel pluginUsageBottom" id="usage">
       <div className="pluginUsageHeader">
         <div>
           <span>LIVE PLUGIN ADOPTION</span>
-          <h2><Activity size={19}/> ALicense Server Usage</h2>
-          <p>Tracks anonymous, successfully licensed ALicense server installations. A server restart does not create another server count.</p>
+          <h2><Activity size={19}/> {product} Server Usage</h2>
+          <p>Tracks anonymous, successfully licensed {product} server installations. A server restart does not create another server count.</p>
         </div>
       </div>
       {loading ? <div className="usageState"><LoaderCircle className="spin" size={18}/> Loading server usage…</div> : error ? <div className="usageState">{error}</div> : data ? <>
@@ -89,7 +91,7 @@ export default function PluginUsageStats({ pluginId }: { pluginId: string }) {
           <div><Server size={18}/><span>Total Servers</span><strong>{data.totals.totalServers.toLocaleString()}</strong><small>Unique licensed installations</small></div>
           <div><Users size={18}/><span>Unique Players Seen</span><strong>{data.totals.uniquePlayers.toLocaleString()}</strong><small>Anonymous hashed player count</small></div>
         </div>
-        {hasActivity ? <ServerTrendChart data={data.series}/> : <div className="usageState">The server graph will begin filling automatically after licensed ALicense servers report usage.</div>}
+        {hasActivity ? <ServerTrendChart data={data.series} product={product}/> : <div className="usageState">The server graph will begin filling automatically after licensed {product} servers report usage.</div>}
       </> : null}
     </section>
   );
