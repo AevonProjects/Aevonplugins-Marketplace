@@ -6,9 +6,21 @@ export const dynamic = "force-dynamic";
 
 const KEY_RE = /^AEVN-[A-F0-9]{10}-[A-F0-9]{10}$/i;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const PRODUCTS: Record<string, string> = {
+  alicense: "ALicense",
+  adiscordall: "ADiscordALL",
+};
 
 function fail(message: string, status = 403) {
   return NextResponse.json({ valid: false, message }, { status, headers: { "Cache-Control": "no-store" } });
+}
+
+function normalizeProductName(value: unknown) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+v?\d+(?:\.\d+){1,3}(?:[-+][0-9a-z.-]+)?\s*$/i, "")
+    .replace(/[^a-z0-9]/g, "");
 }
 
 export async function POST(request: Request) {
@@ -17,11 +29,12 @@ export async function POST(request: Request) {
   catch { return fail("Invalid validation request.", 400); }
 
   const licenseKey = String(body.licenseKey || "").trim().toUpperCase();
-  const product = String(body.product || "").trim().toLowerCase();
+  const product = normalizeProductName(body.product);
   const installationId = String(body.installationId || "").trim().toLowerCase();
   const version = String(body.version || "").trim().slice(0, 40);
+  const displayProduct = PRODUCTS[product];
 
-  if (!KEY_RE.test(licenseKey) || !UUID_RE.test(installationId) || product !== "alicense") {
+  if (!KEY_RE.test(licenseKey) || !UUID_RE.test(installationId) || !displayProduct) {
     return fail("License is invalid for this product.");
   }
 
@@ -37,9 +50,9 @@ export async function POST(request: Request) {
   if (license.status !== "active") return fail(`License status is ${license.status}.`);
 
   const plugin = Array.isArray(license.plugins) ? license.plugins[0] : license.plugins;
-  const pluginName = String((plugin as any)?.name || "").trim().toLowerCase();
-  const pluginSlug = String((plugin as any)?.slug || "").trim().toLowerCase();
-  if (pluginName !== "alicense" && pluginSlug !== "alicense") {
+  const pluginName = normalizeProductName((plugin as any)?.name);
+  const pluginSlug = normalizeProductName((plugin as any)?.slug);
+  if (pluginName !== product && pluginSlug !== product) {
     return fail("License is invalid for this product.");
   }
 
@@ -70,8 +83,6 @@ export async function POST(request: Request) {
 
   await admin.from("licenses").update({ last_validated_at: now }).eq("id", license.id);
 
-  // Resolve a friendly marketplace account name for the server-console acknowledgement.
-  // We intentionally do not return the customer's email or legal verification details.
   const { data: profile } = await admin
     .from("profiles")
     .select("nickname,display_name,username")
@@ -82,11 +93,10 @@ export async function POST(request: Request) {
   return NextResponse.json({
     valid: true,
     message: "License active.",
-    product: "ALicense",
+    product: displayProduct,
     version,
     activated: true,
     ownerName,
-    // The plugin already knows the full key from config.yml; the API only returns a masked display value.
     licenseDisplay: `${licenseKey.slice(0, 10)}••••••${licenseKey.slice(-6)}`,
     serverBinding: "this-server-only",
     checkedAt: now
