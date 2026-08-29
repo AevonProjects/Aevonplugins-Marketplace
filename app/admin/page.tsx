@@ -78,6 +78,8 @@ export default function AdminPage() {
   const [description, setDescription] = useState("");
   const [descriptionHtml, setDescriptionHtml] = useState("");
   const [version, setVersion] = useState("1.0.0");
+  const [releaseType, setReleaseType] = useState<"stable" | "hotfix" | "beta" | "legacy">("stable");
+  const [releaseNotes, setReleaseNotes] = useState("");
   const [wikiUrl, setWikiUrl] = useState("");
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [discordUrl, setDiscordUrl] = useState("");
@@ -98,6 +100,8 @@ export default function AdminPage() {
     setDescription("");
     setDescriptionHtml("");
     setVersion("1.0.0");
+    setReleaseType("stable");
+    setReleaseNotes("");
     setWikiUrl(""); setYoutubeUrl(""); setDiscordUrl("");
     setJarFile(null); setGalleryFiles([null, null, null]);
     setPrice("0");
@@ -208,14 +212,14 @@ export default function AdminPage() {
     return supabase.storage.from("plugin-media").getPublicUrl(pj.path).data.publicUrl;
   }
 
-  async function uploadJarById(pluginId: string, pluginName: string, file: File) {
+  async function uploadJarById(pluginId: string, pluginName: string, file: File, releaseVersion: string, kind: string, notes: string) {
     if (!supabase) throw new Error("Supabase is not configured.");
     if (!file.name.toLowerCase().endsWith(".jar")) throw new Error("Please select a .jar plugin file.");
     const {data:s}=await supabase.auth.getSession(); const token=s.session?.access_token;
-    const prep=await fetch(`/api/admin/plugins/${pluginId}/upload-url`,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({fileName:file.name,fileSize:file.size})});
+    const prep=await fetch(`/api/admin/plugins/${pluginId}/upload-url`,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({fileName:file.name,fileSize:file.size,version:releaseVersion})});
     const pj=await prep.json(); if(!prep.ok) throw new Error(pj.error||"Could not prepare JAR upload.");
     const up=await supabase.storage.from("plugin-files").uploadToSignedUrl(pj.path,pj.token,file,{contentType:"application/java-archive"}); if(up.error) throw up.error;
-    const save=await fetch(`/api/admin/plugins/${pluginId}/file`,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({path:pj.path,fileName:file.name,fileSize:file.size})});
+    const save=await fetch(`/api/admin/plugins/${pluginId}/file`,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({path:pj.path,fileName:file.name,fileSize:file.size,version:releaseVersion,releaseType:kind,changelog:notes})});
     const sj=await save.json(); if(!save.ok) throw new Error(sj.error||`Could not save ${pluginName} JAR metadata.`);
   }
 
@@ -228,17 +232,20 @@ export default function AdminPage() {
     const futureImageCount = [0,1,2].filter((i) => Boolean(galleryFiles[i] || existingImages[i])).length;
     if (status === "published" && futureImageCount < 3) { setNotice({type:"error",text:"Published plugins require 3 carousel images."}); return; }
     if (status === "published" && !editingPlugin?.file_name && !jarFile) { setNotice({type:"error",text:"Published plugins require a JAR file."}); return; }
+    if (editingPlugin?.file_name && jarFile && version.trim() === (editingPlugin.version ?? "").trim()) { setNotice({type:"error",text:"A new JAR must use a new version number so the current release remains available in Version History."}); return; }
+    if (editingPlugin?.file_name && !jarFile && version.trim() !== (editingPlugin.version ?? "").trim()) { setNotice({type:"error",text:"Upload the new JAR when changing the plugin version. Version numbers are tied to releases."}); return; }
+    if (jarFile && editingPlugin?.file_name && !releaseNotes.trim()) { setNotice({type:"error",text:"Please add release notes/changelog for the new version."}); return; }
     try {
       for (const f of galleryFiles) if (f) await validateImage(f);
       setSaving(true); setNotice({ type: "info", text: editingId ? "Saving plugin content and uploads…" : "Creating plugin and uploading content…" });
       const safeHtml = sanitizeRichHtml(descriptionHtml);
       const plain = plainFromHtml(safeHtml) || description.trim();
-      const payload = { name:name.trim(), slug:normalizedSlug, description:plain.slice(0,1000), description_html:safeHtml.trim(), version:version.trim(), price:Number(price)||0, status, wiki_url:wikiUrl.trim()||null, youtube_url:youtubeUrl.trim()||null, discord_url:discordUrl.trim()||null, updated_at:new Date().toISOString() };
+      const payload = { name:name.trim(), slug:normalizedSlug, description:plain.slice(0,1000), description_html:safeHtml.trim(), version:editingPlugin ? (editingPlugin.version ?? version.trim()) : version.trim(), price:Number(price)||0, status, wiki_url:wikiUrl.trim()||null, youtube_url:youtubeUrl.trim()||null, discord_url:discordUrl.trim()||null, updated_at:new Date().toISOString() };
       let pluginId = editingId;
       if (editingId) { const r=await supabase.from("plugins").update(payload).eq("id",editingId); if(r.error) throw r.error; }
       else { const r=await supabase.from("plugins").insert(payload).select("id").single(); if(r.error) throw r.error; pluginId=r.data.id; }
       if (!pluginId) throw new Error("Could not determine plugin ID.");
-      if (jarFile) await uploadJarById(pluginId, name.trim(), jarFile);
+      if (jarFile) await uploadJarById(pluginId, name.trim(), jarFile, version.trim(), releaseType, releaseNotes.trim() || (editingPlugin?.file_name ? "" : "Initial release."));
       if (galleryFiles.some(Boolean)) {
         const urls:string[]=[];
         for (let i=0;i<3;i++) { const f=galleryFiles[i]; if(f) urls[i]=await uploadMedia(pluginId,f); else if(existingImages[i]) urls[i]=existingImages[i]; }
@@ -257,6 +264,8 @@ export default function AdminPage() {
     setDescription(plugin.description ?? "");
     setDescriptionHtml(plugin.description_html || plugin.description || "");
     setVersion(plugin.version ?? "1.0.0");
+    setReleaseType("stable");
+    setReleaseNotes("");
     setWikiUrl(plugin.wiki_url ?? ""); setYoutubeUrl(plugin.youtube_url ?? ""); setDiscordUrl(plugin.discord_url ?? "");
     setJarFile(null); setGalleryFiles([null,null,null]);
     setPrice(String(plugin.price ?? 0));
@@ -280,6 +289,15 @@ export default function AdminPage() {
 
     if (error) {
       setNotice({ type: "error", text: error.message });
+      return;
+    }
+
+    const { error: releaseVisibilityError } = await supabase
+      .from("plugin_versions")
+      .update({ is_published: nextStatus === "published" })
+      .eq("plugin_id", plugin.id);
+    if (releaseVisibilityError) {
+      setNotice({ type: "error", text: `Plugin status changed, but version visibility could not be synchronized: ${releaseVisibilityError.message}` });
       return;
     }
 
@@ -311,18 +329,11 @@ export default function AdminPage() {
   }
 
 
-  async function uploadPluginFile(plugin: PluginRow, file: File | null) {
-    if (!file || !supabase) return;
-    if (!file.name.toLowerCase().endsWith(".jar")) return setNotice({type:"error",text:"Please select a .jar plugin file."});
-    setNotice({type:"info",text:`Preparing upload for ${plugin.name}…`});
-    const {data:s}=await supabase.auth.getSession(); const token=s.session?.access_token;
-    const prep=await fetch(`/api/admin/plugins/${plugin.id}/upload-url`,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({fileName:file.name,fileSize:file.size})});
-    const pj=await prep.json(); if(!prep.ok)return setNotice({type:"error",text:pj.error||"Could not prepare upload."});
-    const up=await supabase.storage.from("plugin-files").uploadToSignedUrl(pj.path,pj.token,file,{contentType:"application/java-archive"});
-    if(up.error)return setNotice({type:"error",text:up.error.message});
-    const save=await fetch(`/api/admin/plugins/${plugin.id}/file`,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({path:pj.path,fileName:file.name,fileSize:file.size})});
-    const sj=await save.json(); if(!save.ok)return setNotice({type:"error",text:sj.error||"Upload metadata failed."});
-    setNotice({type:"success",text:`${file.name} uploaded for ${plugin.name}.`}); await loadPlugins();
+  function prepareNewRelease(plugin: PluginRow) {
+    beginEdit(plugin);
+    setReleaseType("stable");
+    setReleaseNotes("");
+    setNotice({ type: "info", text: `Preparing a new release for ${plugin.name}. Enter a new version, changelog, and choose the new JAR.` });
   }
 
   async function reviewOrder(order: OrderRow, action: "approve" | "reject") {
@@ -400,9 +411,14 @@ export default function AdminPage() {
                 <label>Slug<input value={slug} onChange={(e)=>setSlug(e.target.value)} placeholder={name?makeSlug(name):"alicense"}/></label>
                 <label>Price (PHP)<input type="number" min="0" step="0.01" value={price} onChange={(e)=>setPrice(e.target.value)}/></label>
               </div>
-              <label>Upload JAR File <span className="fieldHint">{editingPlugin?.file_name ? `Current: ${editingPlugin.file_name}` : "Required before publishing"}</span>
+              <label>{editingPlugin ? "New Release JAR" : "Upload JAR File"} <span className="fieldHint">{editingPlugin?.file_name ? `Current latest: ${editingPlugin.file_name}` : "Required before publishing"}</span>
                 <input type="file" accept=".jar,application/java-archive" onChange={(e)=>setJarFile(e.target.files?.[0]??null)} />
               </label>
+              <div className="editorTwoCol releaseEditorFields">
+                <label>Release Type<select value={releaseType} onChange={(e)=>setReleaseType(e.target.value as any)}><option value="stable">Stable</option><option value="hotfix">Hotfix</option><option value="beta">Beta</option><option value="legacy">Legacy</option></select></label>
+                <label>Release Notes / Changelog<textarea value={releaseNotes} onChange={(e)=>setReleaseNotes(e.target.value)} placeholder={editingPlugin ? "Example: Fixed license validation timeout and improved duplicate protection." : "Initial release notes (optional)."}/></label>
+              </div>
+              {editingPlugin && <p className="releaseEditorHint">Uploading a JAR creates a new permanent version-history entry. Use a new version number (for example, {editingPlugin.version || "1.0.0"} → 1.1.2). Old JARs stay available to existing owners.</p>}
               <label>Full Plugin Description <span className="fieldHint">Emojis, bold, italic, underline, fonts, sizes, colors, and lists supported.</span></label>
               <RichTextEditor value={descriptionHtml} onChange={setDescriptionHtml} />
 
@@ -463,10 +479,9 @@ export default function AdminPage() {
                       </div>
                     </div>
                     <div className="adminPluginActions">
-                      <label className="secondaryBtn fileUploadBtn">
-                        <UploadCloud size={15} /> {plugin.file_name ? "Replace JAR" : "Upload JAR"}
-                        <input type="file" accept=".jar,application/java-archive" hidden onChange={(e)=>uploadPluginFile(plugin,e.target.files?.[0] ?? null)} />
-                      </label>
+                      <button className="secondaryBtn" type="button" onClick={() => prepareNewRelease(plugin)}>
+                        <UploadCloud size={15} /> {plugin.file_name ? "New Release" : "Upload JAR"}
+                      </button>
                       <button className="secondaryBtn" type="button" onClick={() => beginEdit(plugin)}>
                         <Edit3 size={15} /> Edit
                       </button>

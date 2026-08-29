@@ -22,7 +22,9 @@ import {
   Youtube,
   MessageCircle,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  History,
+  Tag
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { paymentConfig } from "@/lib/paymentConfig";
@@ -43,6 +45,18 @@ type PluginRow = {
   wiki_url?: string | null;
   youtube_url?: string | null;
   discord_url?: string | null;
+};
+
+
+type PluginVersionRow = {
+  id: string;
+  version: string;
+  release_type: "stable" | "hotfix" | "beta" | "legacy";
+  changelog: string | null;
+  file_name: string;
+  file_size: number | null;
+  is_latest: boolean;
+  created_at: string;
 };
 
 type AccessRow = {
@@ -77,6 +91,9 @@ export default function PluginDetailPage() {
   const [paymentBusy, setPaymentBusy] = useState(false);
   const [paypalBusy, setPaypalBusy] = useState(false);
   const [galleryIndex, setGalleryIndex] = useState(0);
+  const [versions, setVersions] = useState<PluginVersionRow[]>([]);
+  const [versionsLoading, setVersionsLoading] = useState(false);
+  const [versionBusy, setVersionBusy] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadPlugin() {
@@ -143,6 +160,22 @@ export default function PluginDetailPage() {
   }, [slug]);
 
 
+  useEffect(() => {
+    if (!plugin?.id) return;
+    let cancelled = false;
+    (async () => {
+      setVersionsLoading(true);
+      try {
+        const res = await fetch(`/api/plugins/${plugin.id}/versions`, { cache: "no-store" });
+        const body = await res.json().catch(() => ({}));
+        if (!cancelled && res.ok) setVersions((body.versions ?? []) as PluginVersionRow[]);
+      } finally {
+        if (!cancelled) setVersionsLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [plugin?.id]);
+
   async function authToken() {
     if (!supabase) return null;
     const { data } = await supabase.auth.getSession();
@@ -166,6 +199,18 @@ export default function PluginDetailPage() {
     const res = await fetch(`/api/plugins/${plugin.id}/download`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
     const body = await res.json(); setActionBusy(false);
     if (!res.ok) return setActionMessage(body.error || "Could not start download.");
+    window.location.href = body.url;
+  }
+
+  async function downloadVersion(release: PluginVersionRow) {
+    if (!plugin || !supabase || !owned) return;
+    setVersionBusy(release.id);
+    setActionMessage(null);
+    const token = await authToken();
+    const res = await fetch(`/api/plugins/${plugin.id}/versions/${release.id}/download`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+    const body = await res.json().catch(() => ({}));
+    setVersionBusy(null);
+    if (!res.ok) return setActionMessage(body.error || "Could not download this version.");
     window.location.href = body.url;
   }
 
@@ -287,6 +332,7 @@ export default function PluginDetailPage() {
 
       <nav className="resourceTabs" aria-label="Plugin navigation">
         <a className="active" href="#overview">Overview</a>
+        <a href="#versions">Version History</a>
         {plugin.wiki_url && <a href={plugin.wiki_url} target="_blank" rel="noreferrer">Wiki <ExternalLink size={12}/></a>}
         {plugin.youtube_url && <a href={plugin.youtube_url} target="_blank" rel="noreferrer">YouTube Tutorial <ExternalLink size={12}/></a>}
         {plugin.discord_url && <a href={plugin.discord_url} target="_blank" rel="noreferrer">Discord <ExternalLink size={12}/></a>}
@@ -394,6 +440,51 @@ export default function PluginDetailPage() {
           )}
         </aside>
       </div>
+
+      <section className="versionHistoryPanel" id="versions">
+        <div className="versionHistoryHeader">
+          <div>
+            <span>RELEASE ARCHIVE</span>
+            <h2><History size={19}/> Version History</h2>
+            <p>See what changed in every release. Plugin owners can also download previous JAR versions for rollback or compatibility.</p>
+          </div>
+          <strong>{versions.length} release{versions.length === 1 ? "" : "s"}</strong>
+        </div>
+
+        {versionsLoading ? (
+          <div className="versionHistoryEmpty"><LoaderCircle className="spin" size={18}/> Loading release history…</div>
+        ) : versions.length === 0 ? (
+          <div className="versionHistoryEmpty">No archived releases are available yet.</div>
+        ) : (
+          <div className="versionReleaseList">
+            {versions.map((release) => (
+              <article className={`versionReleaseCard ${release.is_latest ? "latest" : ""}`} key={release.id}>
+                <div className="versionReleaseMain">
+                  <div className="versionReleaseTitle">
+                    <strong>v{release.version}</strong>
+                    {release.is_latest && <span className="latestReleaseBadge">LATEST</span>}
+                    <span className={`releaseTypeBadge ${release.release_type}`}><Tag size={11}/>{release.release_type}</span>
+                  </div>
+                  <time>{new Date(release.created_at).toLocaleDateString(undefined,{year:"numeric",month:"short",day:"numeric"})}</time>
+                  <p>{release.changelog || "No changelog was provided for this release."}</p>
+                  <small>{release.file_name}{release.file_size ? ` · ${(release.file_size / 1024 / 1024).toFixed(2)} MB` : ""}</small>
+                </div>
+                <div className="versionReleaseAction">
+                  {owned ? (
+                    <button className={release.is_latest ? "primaryBtn" : "secondaryBtn"} disabled={versionBusy === release.id} onClick={() => downloadVersion(release)}>
+                      {versionBusy === release.id ? <LoaderCircle className="spin" size={14}/> : <Download size={14}/>}
+                      {release.is_latest ? "Download Latest" : "Download"}
+                    </button>
+                  ) : (
+                    <span className="versionLocked"><LockKeyhole size={13}/> Purchase required</span>
+                  )}
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+        {owned && versions.some(v => !v.is_latest) && <p className="legacyDownloadWarning"><TriangleAlert size={14}/> Older releases may contain bugs or security issues that were fixed in newer versions.</p>}
+      </section>
 
       <PluginReviews pluginId={plugin.id} owned={owned} signedIn={signedIn} />
 
