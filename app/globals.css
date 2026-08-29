@@ -139,3 +139,24 @@ html{scroll-behavior:smooth}body{background:#030b13}.shell{display:block;min-hei
 .serverUsageChartHeader>div{display:grid;gap:3px}.serverUsageChartHeader span{font-size:8px;font-weight:900;letter-spacing:.13em;color:#61bdf6}.serverUsageChartHeader strong{font-size:14px;color:#eaf7ff}.serverUsageChartHeader small{font-size:9px;color:#7692a5;white-space:nowrap}
 .serverUsageChartCard svg{display:block;width:100%;height:auto;min-height:180px;overflow:visible}
 @media(max-width:700px){.serverUsageChartHeader{align-items:flex-start;flex-direction:column}.serverUsageChartCard{padding:12px}.serverUsageChartCard svg{min-height:145px}}
+
+/* ALicense header usage badge + single-source latest title */
+.activeServersHeaderBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  border: 1px solid rgba(56,189,248,.28);
+  border-radius: 999px;
+  background: rgba(14,165,233,.08);
+  color: #9bdcff;
+  font-size: .74rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.classicTitleRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}

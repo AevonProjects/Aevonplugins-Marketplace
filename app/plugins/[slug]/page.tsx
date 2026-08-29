@@ -24,7 +24,8 @@ import {
   ChevronLeft,
   ChevronRight,
   History,
-  Tag
+  Tag,
+  Server
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { getPluginDisplayTitle } from "@/lib/pluginDisplay";
@@ -96,6 +97,7 @@ export default function PluginDetailPage() {
   const [versions, setVersions] = useState<PluginVersionRow[]>([]);
   const [versionsLoading, setVersionsLoading] = useState(false);
   const [versionBusy, setVersionBusy] = useState<string | null>(null);
+  const [activeServerCount, setActiveServerCount] = useState<number | null>(null);
 
   useEffect(() => {
     async function loadPlugin() {
@@ -178,6 +180,24 @@ export default function PluginDetailPage() {
     loadPlugin();
   }, [slug]);
 
+
+  useEffect(() => {
+    if (!plugin?.id || plugin.slug !== "alicense") {
+      setActiveServerCount(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/plugins/${plugin.id}/usage`, { cache: "no-store" });
+        const body = await res.json().catch(() => ({}));
+        if (!cancelled && res.ok) setActiveServerCount(Number(body?.totals?.activeServers ?? 0));
+      } catch {
+        if (!cancelled) setActiveServerCount(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [plugin?.id, plugin?.slug]);
 
   useEffect(() => {
     if (!plugin?.id) return;
@@ -341,6 +361,9 @@ export default function PluginDetailPage() {
           <div>
             <div className="classicTitleRow">
               <h1>{getPluginDisplayTitle(plugin.name, plugin.version)}</h1>
+              {plugin.slug === "alicense" && activeServerCount !== null && (
+                <span className="activeServersHeaderBadge"><Server size={14}/> {activeServerCount.toLocaleString()} Active Server{activeServerCount === 1 ? "" : "s"}</span>
+              )}
             </div>
             <p>{plugin.description || "Official Aevon Marketplace plugin."}</p>
           </div>

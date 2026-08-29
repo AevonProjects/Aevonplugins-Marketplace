@@ -4,7 +4,7 @@
  */
 export function getPluginBaseName(name: string) {
   const cleaned = String(name || "Plugin").trim();
-  return cleaned.replace(/\s+v?\d+(?:\.\d+){1,3}(?:[-+][0-9A-Za-z.-]+)?\s*$/i, "").trim() || cleaned;
+  return cleaned.replace(/(?:\s+v?\d+(?:\.\d+){1,3}(?:[-+][0-9A-Za-z.-]+)?)+\s*$/i, "").trim() || cleaned;
 }
 
 /**
@@ -14,6 +14,6 @@ export function getPluginBaseName(name: string) {
  */
 export function getPluginDisplayTitle(name: string, version?: string | null) {
   const base = getPluginBaseName(name);
-  const latest = String(version || "").trim();
+  const latest = String(version || "").trim().replace(/^v/i, "");
   return latest ? `${base} v${latest}` : base;
 }
