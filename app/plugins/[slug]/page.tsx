@@ -48,6 +48,8 @@ type PluginRow = {
   wiki_url?: string | null;
   youtube_url?: string | null;
   discord_url?: string | null;
+  paper_versions?: string[] | null;
+  purpur_versions?: string[] | null;
 };
 
 
@@ -112,7 +114,7 @@ export default function PluginDetailPage() {
 
       const { data: pluginData, error: pluginError } = await supabase
         .from("plugins")
-        .select("id,name,slug,description,description_html,gallery_images,profile_image_url,wiki_url,youtube_url,discord_url,version,price,status,created_at,updated_at")
+        .select("id,name,slug,description,description_html,gallery_images,profile_image_url,wiki_url,youtube_url,discord_url,paper_versions,purpur_versions,version,price,status,created_at,updated_at")
         .eq("slug", slug)
         .eq("status", "published")
         .maybeSingle();
@@ -399,6 +401,8 @@ export default function PluginDetailPage() {
               <div><span>Release Status:</span><strong className="classicPublished">Published</strong></div>
               <div><span>Last Update:</span><strong>{new Date(plugin.updated_at).toLocaleDateString(undefined,{year:"numeric",month:"short",day:"numeric"})}</strong></div>
               <div><span>Marketplace:</span><strong>Aevon Plugins</strong></div>
+              <div className="compatibilityMeta"><span>Paper Compatibility:</span><strong>{plugin.paper_versions?.length ? plugin.paper_versions.join(", ") : "Not specified"}</strong></div>
+              <div className="compatibilityMeta"><span>Purpur Compatibility:</span><strong>{plugin.purpur_versions?.length ? plugin.purpur_versions.join(", ") : "Not specified"}</strong></div>
             </div>
 
             {(plugin.gallery_images?.length ?? 0) > 0 && (
