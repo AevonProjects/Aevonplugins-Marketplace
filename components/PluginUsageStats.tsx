@@ -10,30 +10,43 @@ type Payload = {
   activeWindowDays: number;
 };
 
-function MiniLineChart({ data, field, label }: { data: Point[]; field: "servers" | "players"; label: string }) {
-  const width = 620, height = 170, pad = 18;
-  const values = data.map((d) => d[field]);
+function ServerTrendChart({ data }: { data: Point[] }) {
+  const width = 900, height = 230, left = 42, right = 18, top = 18, bottom = 32;
+  const values = data.map((d) => d.servers);
   const max = Math.max(1, ...values);
   const points = data.map((d, i) => {
-    const x = data.length <= 1 ? width / 2 : pad + (i * (width - pad * 2)) / (data.length - 1);
-    const y = height - pad - (d[field] / max) * (height - pad * 2);
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(" ");
+    const x = data.length <= 1 ? width / 2 : left + (i * (width - left - right)) / (data.length - 1);
+    const y = height - bottom - (d.servers / max) * (height - top - bottom);
+    return { x, y, d };
+  });
+  const path = points.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
   const first = data[0]?.date;
   const last = data[data.length - 1]?.date;
+
   return (
-    <div className="usageChartCard">
-      <div className="usageChartTop"><strong>{label}</strong><span>Peak {max.toLocaleString()}</span></div>
-      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${label} usage over the last 30 days`}>
-        <line x1={pad} y1={height-pad} x2={width-pad} y2={height-pad} className="usageAxis" />
-        <line x1={pad} y1={pad} x2={pad} y2={height-pad} className="usageAxis" />
-        <polyline points={points} className={`usageLine ${field}`} fill="none" />
-        {data.map((d, i) => {
-          const [x, y] = points.split(" ")[i].split(",").map(Number);
-          return <circle key={`${field}-${d.date}`} cx={x} cy={y} r="2.8" className={`usageDot ${field}`}><title>{`${d.date}: ${d[field].toLocaleString()}`}</title></circle>;
-        })}
+    <div className="serverUsageChartCard">
+      <div className="serverUsageChartHeader">
+        <div>
+          <span>SERVER ADOPTION TREND</span>
+          <strong>Servers currently using ALicense</strong>
+        </div>
+        <small>Peak {max.toLocaleString()} server{max === 1 ? "" : "s"}</small>
+      </div>
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="ALicense server usage over the last 30 days">
+        <line x1={left} y1={height-bottom} x2={width-right} y2={height-bottom} className="usageAxis" />
+        <line x1={left} y1={top} x2={left} y2={height-bottom} className="usageAxis" />
+        <polyline points={path} className="usageLine servers" fill="none" />
+        {points.map(({x,y,d}) => (
+          <circle key={d.date} cx={x} cy={y} r="3.2" className="usageDot servers">
+            <title>{`${d.date}: ${d.servers.toLocaleString()} server${d.servers === 1 ? "" : "s"}`}</title>
+          </circle>
+        ))}
       </svg>
-      <div className="usageChartDates"><span>{first ? new Date(`${first}T00:00:00`).toLocaleDateString(undefined,{month:"short",day:"numeric"}) : ""}</span><span>Last 30 days</span><span>{last ? new Date(`${last}T00:00:00`).toLocaleDateString(undefined,{month:"short",day:"numeric"}) : ""}</span></div>
+      <div className="usageChartDates">
+        <span>{first ? new Date(`${first}T00:00:00`).toLocaleDateString(undefined,{month:"short",day:"numeric"}) : ""}</span>
+        <span>Last 30 days</span>
+        <span>{last ? new Date(`${last}T00:00:00`).toLocaleDateString(undefined,{month:"short",day:"numeric"}) : ""}</span>
+      </div>
     </div>
   );
 }
@@ -59,20 +72,24 @@ export default function PluginUsageStats({ pluginId }: { pluginId: string }) {
     return () => { cancelled = true; };
   }, [pluginId]);
 
-  const hasActivity = useMemo(() => Boolean(data && (data.totals.totalServers || data.totals.uniquePlayers)), [data]);
+  const hasActivity = useMemo(() => Boolean(data && data.series.some((p) => p.servers > 0)), [data]);
 
   return (
-    <section className="pluginUsagePanel" id="usage">
+    <section className="pluginUsagePanel pluginUsageBottom" id="usage">
       <div className="pluginUsageHeader">
-        <div><span>LIVE ADOPTION</span><h2><Activity size={19}/> ALicense Usage</h2><p>Anonymous marketplace telemetry from valid ALicense installations. Player identities are hashed before leaving the Minecraft server.</p></div>
-      </div>
-      {loading ? <div className="usageState"><LoaderCircle className="spin" size={18}/> Loading usage statistics…</div> : error ? <div className="usageState">{error}</div> : data ? <>
-        <div className="usageStatGrid">
-          <div><Server size={18}/><span>Total Servers</span><strong>{data.totals.totalServers.toLocaleString()}</strong></div>
-          <div><Activity size={18}/><span>Active Servers</span><strong>{data.totals.activeServers.toLocaleString()}</strong><small>Seen in the last {data.activeWindowDays} days</small></div>
-          <div><Users size={18}/><span>Unique Players</span><strong>{data.totals.uniquePlayers.toLocaleString()}</strong><small>Anonymous unique player count</small></div>
+        <div>
+          <span>LIVE PLUGIN ADOPTION</span>
+          <h2><Activity size={19}/> ALicense Server Usage</h2>
+          <p>Tracks anonymous, successfully licensed ALicense server installations. A server restart does not create another server count.</p>
         </div>
-        {hasActivity ? <div className="usageCharts"><MiniLineChart data={data.series} field="servers" label="Servers using ALicense"/><MiniLineChart data={data.series} field="players" label="Unique players seen"/></div> : <div className="usageState">Usage data will appear here after licensed ALicense servers begin reporting.</div>}
+      </div>
+      {loading ? <div className="usageState"><LoaderCircle className="spin" size={18}/> Loading server usage…</div> : error ? <div className="usageState">{error}</div> : data ? <>
+        <div className="usageStatGrid">
+          <div><Activity size={18}/><span>Currently Active</span><strong>{data.totals.activeServers.toLocaleString()}</strong><small>Validated in the last {data.activeWindowDays} days</small></div>
+          <div><Server size={18}/><span>Total Servers</span><strong>{data.totals.totalServers.toLocaleString()}</strong><small>Unique licensed installations</small></div>
+          <div><Users size={18}/><span>Unique Players Seen</span><strong>{data.totals.uniquePlayers.toLocaleString()}</strong><small>Anonymous hashed player count</small></div>
+        </div>
+        {hasActivity ? <ServerTrendChart data={data.series}/> : <div className="usageState">The server graph will begin filling automatically after licensed ALicense servers report usage.</div>}
       </> : null}
     </section>
   );

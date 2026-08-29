@@ -128,7 +128,24 @@ export default function PluginDetailPage() {
         return;
       }
 
-      const resolvedPlugin = pluginData as PluginRow;
+      let resolvedPlugin = pluginData as PluginRow;
+
+      // Version History is the source of truth for the version shown in the
+      // plugin title. Always prioritize the newest uploaded published release,
+      // even if older listing metadata is still cached.
+      const { data: latestReleaseRows } = await supabase
+        .from("plugin_versions")
+        .select("version,is_latest,created_at")
+        .eq("plugin_id", resolvedPlugin.id)
+        .eq("is_published", true)
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      const latestRelease = latestReleaseRows?.[0];
+      if (latestRelease?.version) {
+        resolvedPlugin = { ...resolvedPlugin, version: String(latestRelease.version) };
+      }
+
       setPlugin(resolvedPlugin);
 
       const { data: authData } = await supabase.auth.getUser();
@@ -318,179 +335,175 @@ export default function PluginDetailPage() {
     <div className="pageWrap pluginDetailWrap pluginResourceView">
       <Link className="backLink resourceBackLink" href="/"><ArrowLeft size={16} /> Back to Marketplace</Link>
 
-      <header className="resourcePluginHeader">
-        <div className="resourceTitleBlock">
-          <div className="resourceTitleLine">
-            <h1>{getPluginDisplayTitle(plugin.name, plugin.version)}</h1>
+      <header className="classicResourceHeader">
+        <div className="classicResourceIdentity">
+          <div className="classicPluginGlyph"><Package size={25}/></div>
+          <div>
+            <div className="classicTitleRow">
+              <h1>{getPluginDisplayTitle(plugin.name, plugin.version)}</h1>
+            </div>
+            <p>{plugin.description || "Official Aevon Marketplace plugin."}</p>
           </div>
-          <div className="resourceSubline">
-            <BadgeCheck size={14} /> Official Aevon Marketplace Plugin
-            <span>•</span>
-            <span>Published</span>
-          </div>
+        </div>
+
+        <div className="classicHeaderAction">
+          {!signedIn ? (
+            <Link className="classicDownloadBtn locked" href="/login"><LockKeyhole size={16}/> Login to Access</Link>
+          ) : owned ? (
+            <button className="classicDownloadBtn" disabled={actionBusy} onClick={downloadPlugin}>
+              <Download size={16}/><span>{actionBusy ? "Preparing…" : "Download Now"}</span><small>{plugin.version ? `v${plugin.version}` : "Latest"}</small>
+            </button>
+          ) : price > 0 ? (
+            <button className="classicDownloadBtn purchase" onClick={()=>setShowPayment(true)}><ShoppingCart size={16}/><span>Purchase Plugin</span><small>₱{price.toLocaleString()}</small></button>
+          ) : (
+            <button className="classicDownloadBtn purchase" disabled={actionBusy} onClick={claimFree}><ShoppingCart size={16}/><span>{actionBusy ? "Adding…" : "Claim Free"}</span><small>Free</small></button>
+          )}
         </div>
       </header>
 
-      <nav className="resourceTabs" aria-label="Plugin navigation">
+      {actionMessage && <div className="classicActionMessage">{actionMessage}</div>}
+
+      <nav className="classicResourceTabs" aria-label="Plugin navigation">
         <a className="active" href="#overview">Overview</a>
+        {plugin.wiki_url && <a href={plugin.wiki_url} target="_blank" rel="noreferrer">Documentation</a>}
+        <a href="#reviews">Reviews</a>
         <a href="#versions">Version History</a>
         {plugin.slug === "alicense" && <a href="#usage">Usage</a>}
-        {plugin.wiki_url && <a href={plugin.wiki_url} target="_blank" rel="noreferrer">Wiki <ExternalLink size={12}/></a>}
-        {plugin.youtube_url && <a href={plugin.youtube_url} target="_blank" rel="noreferrer">YouTube Tutorial <ExternalLink size={12}/></a>}
-        {plugin.discord_url && <a href={plugin.discord_url} target="_blank" rel="noreferrer">Discord <ExternalLink size={12}/></a>}
+        {plugin.discord_url && <a href={plugin.discord_url} target="_blank" rel="noreferrer">Discussion</a>}
       </nav>
 
-      <div className="resourcePluginLayout" id="overview">
-        <main className="resourceMainColumn">
-          {(plugin.gallery_images?.length ?? 0) > 0 ? (
-            <section className="resourceGallery">
-              <div className="resourceGalleryFrame">
-                <img key={`${plugin.id}-${galleryIndex}`} className="resourceGalleryImage" src={plugin.gallery_images![galleryIndex]} alt={`${plugin.name} screenshot ${galleryIndex + 1}`} />
-                {plugin.gallery_images!.length > 1 && <>
-                  <button className="galleryNav galleryPrev" onClick={()=>setGalleryIndex((galleryIndex-1+plugin.gallery_images!.length)%plugin.gallery_images!.length)} aria-label="Previous image"><ChevronLeft/></button>
-                  <button className="galleryNav galleryNext" onClick={()=>setGalleryIndex((galleryIndex+1)%plugin.gallery_images!.length)} aria-label="Next image"><ChevronRight/></button>
-                </>}
+      <div className="classicResourceLayout" id="overview">
+        <main className="classicMainColumn">
+          <section className="classicOverviewCard">
+            <div className="classicMetaGrid">
+              <div><span>Latest Version:</span><strong>{plugin.version || "1.0.0"}</strong></div>
+              <div><span>Release Status:</span><strong className="classicPublished">Published</strong></div>
+              <div><span>Last Update:</span><strong>{new Date(plugin.updated_at).toLocaleDateString(undefined,{year:"numeric",month:"short",day:"numeric"})}</strong></div>
+              <div><span>Marketplace:</span><strong>Aevon Plugins</strong></div>
+            </div>
+
+            {(plugin.gallery_images?.length ?? 0) > 0 && (
+              <div className="classicGallery">
+                <div className="resourceGalleryFrame">
+                  <img key={`${plugin.id}-${galleryIndex}`} className="resourceGalleryImage" src={plugin.gallery_images![galleryIndex]} alt={`${plugin.name} screenshot ${galleryIndex + 1}`} />
+                  {plugin.gallery_images!.length > 1 && <>
+                    <button className="galleryNav galleryPrev" onClick={()=>setGalleryIndex((galleryIndex-1+plugin.gallery_images!.length)%plugin.gallery_images!.length)} aria-label="Previous image"><ChevronLeft/></button>
+                    <button className="galleryNav galleryNext" onClick={()=>setGalleryIndex((galleryIndex+1)%plugin.gallery_images!.length)} aria-label="Next image"><ChevronRight/></button>
+                  </>}
+                </div>
+                {plugin.gallery_images!.length > 1 && <div className="resourceGalleryControls">
+                  <span>{galleryIndex + 1} / {plugin.gallery_images!.length}</span>
+                  <div className="galleryDots">{plugin.gallery_images!.map((_,i)=><button key={i} className={i===galleryIndex?"active":""} onClick={()=>setGalleryIndex(i)} aria-label={`Show image ${i+1}`}/>)}</div>
+                </div>}
               </div>
-              {plugin.gallery_images!.length > 1 && <div className="resourceGalleryControls">
-                <span>{galleryIndex + 1} / {plugin.gallery_images!.length}</span>
-                <div className="galleryDots">{plugin.gallery_images!.map((_,i)=><button key={i} className={i===galleryIndex?"active":""} onClick={()=>setGalleryIndex(i)} aria-label={`Show image ${i+1}`}/>)}</div>
-              </div>}
-            </section>
-          ) : (
-            <section className="resourceGalleryEmpty">
-              <Package size={42}/>
-              <strong>{plugin.name}</strong>
-              <span>Plugin preview images will appear here.</span>
-            </section>
-          )}
-
-          <article className="resourceDescriptionPanel">
-            <div className="resourceSectionHeading">
-              <h2>Description</h2>
-              <span>Everything you need to know about {plugin.name}</span>
-            </div>
-            {plugin.description_html
-              ? <div className="richPluginDescription" dangerouslySetInnerHTML={{__html:plugin.description_html}}/>
-              : <p className="richPluginDescription">{plugin.description || "Official Aevon plugin."}</p>}
-          </article>
-        </main>
-
-        <aside className="resourceSidebar">
-          <section className="resourcePurchaseCard">
-            <div className="resourcePriceRow">
-              <span>{owned ? "Your access" : "Plugin price"}</span>
-              <strong>{price > 0 ? `₱${price.toLocaleString()}` : "Free"}</strong>
-            </div>
-
-            {!signedIn ? (
-              <>
-                <button className="pluginActionBtn lockedAction" disabled><LockKeyhole size={18}/> LOGIN / REGISTER</button>
-                <p className="resourceActionHint">Create an account or sign in before purchasing or downloading plugins.</p>
-              </>
-            ) : owned ? (
-              <>
-                <button className="pluginActionBtn ownedDownloadAction" disabled={actionBusy} onClick={downloadPlugin}>
-                  <Download size={18}/>{actionBusy ? "PREPARING DOWNLOAD…" : "DOWNLOAD NOW"}
-                </button>
-                <div className="resourceOwnedState"><BadgeCheck size={16}/><span>Purchased / Owned</span></div>
-              </>
-            ) : price > 0 ? (
-              <>
-                <button className="pluginActionBtn purchaseAction" disabled={actionBusy} onClick={()=>setShowPayment(true)}>
-                  <ShoppingCart size={18}/> PURCHASE PLUGIN
-                </button>
-                <p className="resourceActionHint">Choose GCash for manual verification or PayPal for automatic instant verification.</p>
-              </>
-            ) : (
-              <button className="pluginActionBtn purchaseAction" disabled={actionBusy} onClick={claimFree}>
-                <ShoppingCart size={18}/>{actionBusy ? "ADDING…" : "CLAIM FREE PLUGIN"}
-              </button>
             )}
 
-            {actionMessage && <p className="muted actionMessage">{actionMessage}</p>}
+            <article className="classicDescription">
+              <h2>{plugin.name}</h2>
+              {plugin.description_html
+                ? <div className="richPluginDescription" dangerouslySetInnerHTML={{__html:plugin.description_html}}/>
+                : <p className="richPluginDescription">{plugin.description || "Official Aevon plugin."}</p>}
+            </article>
+          </section>
+
+          <section className="versionHistoryPanel classicVersionPanel" id="versions">
+            <div className="versionHistoryHeader">
+              <div>
+                <span>RELEASE ARCHIVE</span>
+                <h2><History size={19}/> Version History</h2>
+                <p>Review every update, hotfix and previous release. Plugin owners can download older versions whenever they need to roll back.</p>
+              </div>
+              <strong>{versions.length} release{versions.length === 1 ? "" : "s"}</strong>
+            </div>
+
+            {versionsLoading ? (
+              <div className="versionHistoryEmpty"><LoaderCircle className="spin" size={18}/> Loading release history…</div>
+            ) : versions.length === 0 ? (
+              <div className="versionHistoryEmpty">No archived releases are available yet.</div>
+            ) : (
+              <div className="versionReleaseList">
+                {versions.map((release) => (
+                  <article className={`versionReleaseCard ${release.is_latest ? "latest" : ""}`} key={release.id}>
+                    <div className="versionReleaseMain">
+                      <div className="versionReleaseTitle">
+                        <strong>v{release.version}</strong>
+                        {release.is_latest && <span className="latestReleaseBadge">LATEST</span>}
+                        <span className={`releaseTypeBadge ${release.release_type}`}><Tag size={11}/>{release.release_type}</span>
+                      </div>
+                      <time>{new Date(release.created_at).toLocaleDateString(undefined,{year:"numeric",month:"short",day:"numeric"})}</time>
+                      <p>{release.changelog || "No changelog was provided for this release."}</p>
+                      <small>{release.file_name}{release.file_size ? ` · ${(release.file_size / 1024 / 1024).toFixed(2)} MB` : ""}</small>
+                    </div>
+                    <div className="versionReleaseAction">
+                      {owned ? (
+                        <button className={release.is_latest ? "primaryBtn" : "secondaryBtn"} disabled={versionBusy === release.id} onClick={() => downloadVersion(release)}>
+                          {versionBusy === release.id ? <LoaderCircle className="spin" size={14}/> : <Download size={14}/>} {release.is_latest ? "Download Latest" : "Download"}
+                        </button>
+                      ) : <span className="versionLocked"><LockKeyhole size={13}/> Purchase required</span>}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+            {owned && versions.some(v => !v.is_latest) && <p className="legacyDownloadWarning"><TriangleAlert size={14}/> Older releases may contain bugs or security issues fixed in newer versions.</p>}
+          </section>
+
+          <div id="reviews" className="classicReviewsAnchor">
+            <PluginReviews pluginId={plugin.id} owned={owned} signedIn={signedIn} />
+          </div>
+
+          {plugin.slug === "alicense" && (
+            <div className="classicBottomUsage">
+              <PluginUsageStats pluginId={plugin.id} />
+            </div>
+          )}
+        </main>
+
+        <aside className="classicSidebar">
+          <section className="classicSideCard accentCard">
+            <div className="classicCardTitle"><ShieldCheck size={15}/> INFORMATION</div>
+            <div className="classicInfoRows">
+              <div><span>Plugin:</span><strong>{plugin.name}</strong></div>
+              <div><span>Latest Version:</span><strong>{plugin.version || "1.0.0"}</strong></div>
+              <div><span>Last Update:</span><strong>{new Date(plugin.updated_at).toLocaleDateString()}</strong></div>
+              <div><span>Price:</span><strong>{price > 0 ? `₱${price.toLocaleString()}` : "Free"}</strong></div>
+              <div><span>Status:</span><strong className="classicPublished">Published</strong></div>
+            </div>
+          </section>
+
+          <section className="classicSideCard accentCard latestCard">
+            <div className="classicCardTitle"><History size={15}/> VERSION {plugin.version || "1.0.0"}</div>
+            <div className="classicInfoRows">
+              <div><span>Released:</span><strong>{new Date(plugin.updated_at).toLocaleDateString()}</strong></div>
+              <div><span>Downloads:</span><strong>{license?.download_count ?? "—"}</strong></div>
+              <div><span>Release:</span><strong>{versions.find(v=>v.is_latest)?.release_type || "stable"}</strong></div>
+            </div>
+            {owned && <button className="classicMiniDownload" onClick={downloadPlugin} disabled={actionBusy}><Download size={14}/> Download Latest</button>}
           </section>
 
           {signedIn && owned && license && (
-            <section className="resourceSideCard">
-              <h3><KeyRound size={16}/> License</h3>
-              <div className="resourceSideFacts">
-                <div><span>Status</span><strong className={`licenseStatus ${license.status}`}>{license.status}</strong></div>
-                <div className="wideFact"><span>License Key</span><code>{license.license_key}</code></div>
-                <div><span>Downloads</span><strong>{license.download_count}</strong></div>
-                <div><span>Last Download</span><strong>{license.last_download_at ? new Date(license.last_download_at).toLocaleDateString() : "Never"}</strong></div>
+            <section className="classicSideCard accentCard">
+              <div className="classicCardTitle"><KeyRound size={15}/> YOUR LICENSE</div>
+              <div className="classicInfoRows">
+                <div><span>Status:</span><strong className={`licenseStatus ${license.status}`}>{license.status}</strong></div>
+                <div className="stacked"><span>License #:</span><code>{license.license_key}</code></div>
+                <div><span>Downloads:</span><strong>{license.download_count}</strong></div>
               </div>
             </section>
           )}
 
-          <section className="resourceSideCard">
-            <h3><ShieldCheck size={16}/> Plugin Information</h3>
-            <div className="resourceInfoList">
-              <div><span>Version</span><strong>{plugin.version || "1.0.0"}</strong></div>
-              <div><span>Status</span><strong className="resourcePublished">Published</strong></div>
-              <div><span>Updated</span><strong>{new Date(plugin.updated_at).toLocaleDateString()}</strong></div>
-              <div><span>Type</span><strong>Aevon Plugin</strong></div>
-            </div>
-          </section>
-
           {(plugin.wiki_url || plugin.youtube_url || plugin.discord_url) && (
-            <section className="resourceSideCard resourceLinksCard">
-              <h3><ExternalLink size={16}/> Resources</h3>
-              {plugin.wiki_url && <a href={plugin.wiki_url} target="_blank" rel="noreferrer"><BookOpen size={16}/><span>Plugin Wiki</span><ExternalLink size={12}/></a>}
-              {plugin.youtube_url && <a href={plugin.youtube_url} target="_blank" rel="noreferrer"><Youtube size={16}/><span>YouTube Tutorial</span><ExternalLink size={12}/></a>}
-              {plugin.discord_url && <a href={plugin.discord_url} target="_blank" rel="noreferrer"><MessageCircle size={16}/><span>Discord Support</span><ExternalLink size={12}/></a>}
+            <section className="classicSideCard accentCard">
+              <div className="classicCardTitle"><ExternalLink size={15}/> RESOURCES</div>
+              <div className="classicResourceLinks">
+                {plugin.wiki_url && <a href={plugin.wiki_url} target="_blank" rel="noreferrer"><BookOpen size={15}/> Documentation</a>}
+                {plugin.youtube_url && <a href={plugin.youtube_url} target="_blank" rel="noreferrer"><Youtube size={15}/> Video Tutorial</a>}
+                {plugin.discord_url && <a href={plugin.discord_url} target="_blank" rel="noreferrer"><MessageCircle size={15}/> Discussion / Support</a>}
+              </div>
             </section>
           )}
         </aside>
       </div>
-
-      {plugin.slug === "alicense" && <PluginUsageStats pluginId={plugin.id} />}
-
-      <section className="versionHistoryPanel" id="versions">
-        <div className="versionHistoryHeader">
-          <div>
-            <span>RELEASE ARCHIVE</span>
-            <h2><History size={19}/> Version History</h2>
-            <p>See what changed in every release. Plugin owners can also download previous JAR versions for rollback or compatibility.</p>
-          </div>
-          <strong>{versions.length} release{versions.length === 1 ? "" : "s"}</strong>
-        </div>
-
-        {versionsLoading ? (
-          <div className="versionHistoryEmpty"><LoaderCircle className="spin" size={18}/> Loading release history…</div>
-        ) : versions.length === 0 ? (
-          <div className="versionHistoryEmpty">No archived releases are available yet.</div>
-        ) : (
-          <div className="versionReleaseList">
-            {versions.map((release) => (
-              <article className={`versionReleaseCard ${release.is_latest ? "latest" : ""}`} key={release.id}>
-                <div className="versionReleaseMain">
-                  <div className="versionReleaseTitle">
-                    <strong>v{release.version}</strong>
-                    {release.is_latest && <span className="latestReleaseBadge">LATEST</span>}
-                    <span className={`releaseTypeBadge ${release.release_type}`}><Tag size={11}/>{release.release_type}</span>
-                  </div>
-                  <time>{new Date(release.created_at).toLocaleDateString(undefined,{year:"numeric",month:"short",day:"numeric"})}</time>
-                  <p>{release.changelog || "No changelog was provided for this release."}</p>
-                  <small>{release.file_name}{release.file_size ? ` · ${(release.file_size / 1024 / 1024).toFixed(2)} MB` : ""}</small>
-                </div>
-                <div className="versionReleaseAction">
-                  {owned ? (
-                    <button className={release.is_latest ? "primaryBtn" : "secondaryBtn"} disabled={versionBusy === release.id} onClick={() => downloadVersion(release)}>
-                      {versionBusy === release.id ? <LoaderCircle className="spin" size={14}/> : <Download size={14}/>}
-                      {release.is_latest ? "Download Latest" : "Download"}
-                    </button>
-                  ) : (
-                    <span className="versionLocked"><LockKeyhole size={13}/> Purchase required</span>
-                  )}
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-        {owned && versions.some(v => !v.is_latest) && <p className="legacyDownloadWarning"><TriangleAlert size={14}/> Older releases may contain bugs or security issues that were fixed in newer versions.</p>}
-      </section>
-
-      <PluginReviews pluginId={plugin.id} owned={owned} signedIn={signedIn} />
 
       {showPayment && (
         <div className="paymentModalBackdrop" onMouseDown={(e) => { if (e.currentTarget === e.target) setShowPayment(false); }}>
