@@ -24,8 +24,7 @@ import {
   ChevronLeft,
   ChevronRight,
   History,
-  Tag,
-  Server
+  Tag
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { getPluginDisplayTitle } from "@/lib/pluginDisplay";
@@ -361,11 +360,7 @@ export default function PluginDetailPage() {
           <div>
             <div className="classicTitleRow">
               <h1>{getPluginDisplayTitle(plugin.name, plugin.version)}</h1>
-              {plugin.slug === "alicense" && activeServerCount !== null && (
-                <span className="activeServersHeaderBadge"><Server size={14}/> {activeServerCount.toLocaleString()} Active Server{activeServerCount === 1 ? "" : "s"}</span>
-              )}
             </div>
-            <p>{plugin.description || "Official Aevon Marketplace plugin."}</p>
           </div>
         </div>
 
