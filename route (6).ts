@@ -34,6 +34,9 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
  });
  if(insertError)return NextResponse.json({error:insertError.message},{status:400});
 
+ // Keep the main plugin row synchronized with the release that was just
+ // marked latest. Public pages also resolve plugin_versions directly, so the
+ // latest uploaded release remains the source of truth on every surface.
  const {error}=await auth.admin.from('plugins').update({
    version,
    file_path:b.path,
@@ -42,5 +45,5 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
    updated_at:new Date().toISOString()
  }).eq('id',id);
  if(error)return NextResponse.json({error:error.message},{status:400});
- return NextResponse.json({ok:true});
+ return NextResponse.json({ok:true,version});
 }

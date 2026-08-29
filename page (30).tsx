@@ -49,7 +49,26 @@ export default function MarketplacePage() {
         setPlugins([]);
         setLoadError("We couldn't load the marketplace right now. Please try again shortly.");
       } else {
-        setPlugins((data ?? []) as PluginRow[]);
+        const basePlugins = (data ?? []) as PluginRow[];
+
+        // Always prioritize the release marked as latest in plugin_versions.
+        // This keeps marketplace titles correct even if an older plugins.version
+        // value was left behind by a previous deployment or manual edit.
+        const { data: latestRows } = await supabase
+          .from("plugin_versions")
+          .select("plugin_id,version,is_latest,created_at")
+          .in("plugin_id", basePlugins.map((plugin) => plugin.id))
+          .eq("is_latest", true)
+          .eq("is_published", true);
+
+        const latestByPlugin = new Map(
+          (latestRows ?? []).map((row: any) => [String(row.plugin_id), String(row.version || "").trim()])
+        );
+
+        setPlugins(basePlugins.map((plugin) => ({
+          ...plugin,
+          version: latestByPlugin.get(plugin.id) || plugin.version
+        })));
       }
       setLoading(false);
     }

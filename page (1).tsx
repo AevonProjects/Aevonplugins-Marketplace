@@ -466,7 +466,7 @@ export default function AdminPage() {
                   <article className="adminPluginRow" key={plugin.id}>
                     <div className="adminPluginMain">
                       <div className="adminPluginTitleRow">
-                        <h3>{plugin.name}</h3>
+                        <h3>{getPluginDisplayTitle(plugin.name, plugin.version)}</h3>
                         <span className={`statusBadge ${plugin.status === "published" ? "published" : "draft"}`}>
                           {plugin.status === "published" ? <Eye size={13} /> : <EyeOff size={13} />}
                           {plugin.status}

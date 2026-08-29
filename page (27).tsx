@@ -128,7 +128,23 @@ export default function PluginDetailPage() {
         return;
       }
 
-      const resolvedPlugin = pluginData as PluginRow;
+      let resolvedPlugin = pluginData as PluginRow;
+
+      // Version History is the source of truth for the version shown in the
+      // page title. The newest uploaded release always wins over stale plugin
+      // listing metadata.
+      const { data: latestRelease } = await supabase
+        .from("plugin_versions")
+        .select("version,is_latest,created_at")
+        .eq("plugin_id", resolvedPlugin.id)
+        .eq("is_latest", true)
+        .eq("is_published", true)
+        .maybeSingle();
+
+      if (latestRelease?.version) {
+        resolvedPlugin = { ...resolvedPlugin, version: String(latestRelease.version) };
+      }
+
       setPlugin(resolvedPlugin);
 
       const { data: authData } = await supabase.auth.getUser();
