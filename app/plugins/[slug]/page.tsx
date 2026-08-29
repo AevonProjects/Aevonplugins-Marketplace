@@ -75,6 +75,7 @@ export default function PluginDetailPage() {
   const [showPayment, setShowPayment] = useState(false);
   const [gcashOrder, setGcashOrder] = useState<{order_code:string;amount:number;status:string}|null>(null);
   const [paymentBusy, setPaymentBusy] = useState(false);
+  const [paypalBusy, setPaypalBusy] = useState(false);
   const [galleryIndex, setGalleryIndex] = useState(0);
 
   useEffect(() => {
@@ -189,6 +190,26 @@ export default function PluginDetailPage() {
     if (!gcashOrder) return;
     await navigator.clipboard?.writeText(gcashOrder.order_code);
     setActionMessage('Order reference copied.');
+  }
+
+  async function startPaypalCheckout() {
+    if (!plugin || !supabase) return;
+    setPaypalBusy(true);
+    setActionMessage(null);
+    const token = await authToken();
+    if (!token) { setPaypalBusy(false); setActionMessage('Please sign in again before using PayPal.'); return; }
+    const res = await fetch('/api/orders/paypal/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ pluginId: plugin.id })
+    });
+    const body = await res.json();
+    if (!res.ok || !body.approveUrl) {
+      setPaypalBusy(false);
+      setActionMessage(body.error || 'Could not start PayPal checkout.');
+      return;
+    }
+    window.location.href = body.approveUrl;
   }
 
   if (loading) {
@@ -307,7 +328,7 @@ export default function PluginDetailPage() {
                 <button className="pluginActionBtn purchaseAction" disabled={actionBusy} onClick={()=>setShowPayment(true)}>
                   <ShoppingCart size={18}/> PURCHASE PLUGIN
                 </button>
-                <p className="resourceActionHint">Choose GCash at checkout. PayPal automatic checkout will be added separately.</p>
+                <p className="resourceActionHint">Choose GCash for manual verification or PayPal for automatic instant verification.</p>
               </>
             ) : (
               <button className="pluginActionBtn purchaseAction" disabled={actionBusy} onClick={claimFree}>
@@ -369,10 +390,10 @@ export default function PluginDetailPage() {
                   <span>Manual verification · Up to 24 hours</span>
                   <small>{paymentBusy ? 'Preparing order…' : 'PAY WITH GCASH'}</small>
                 </button>
-                <button className="paymentChoice paypalChoice" onClick={() => setActionMessage('PayPal automatic checkout is the next payment integration step.')} disabled>
+                <button className="paymentChoice paypalChoice" onClick={startPaypalCheckout} disabled={paypalBusy || paymentBusy}>
                   <strong>PayPal</strong>
-                  <span>Automatic verification · Instant access</span>
-                  <small>COMING NEXT</small>
+                  <span>Automatic verification · Instant access after successful payment</span>
+                  <small>{paypalBusy ? 'CONNECTING TO PAYPAL…' : 'PAY WITH PAYPAL'}</small>
                 </button>
               </div>
             ) : (

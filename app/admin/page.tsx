@@ -126,6 +126,7 @@ export default function AdminPage() {
     const { data, error } = await supabase
       .from("marketplace_orders")
       .select("id,order_code,customer_email,amount,currency,payment_method,status,created_at,plugin_id,plugins(name)")
+      .eq("payment_method", "gcash")
       .order("created_at", { ascending: false })
       .limit(100);
     setLoadingOrders(false);
