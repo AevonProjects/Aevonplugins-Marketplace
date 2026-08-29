@@ -193,23 +193,46 @@ export default function PluginDetailPage() {
   }
 
   async function startPaypalCheckout() {
-    if (!plugin || !supabase) return;
+    if (!plugin || !supabase || paypalBusy) return;
     setPaypalBusy(true);
     setActionMessage(null);
-    const token = await authToken();
-    if (!token) { setPaypalBusy(false); setActionMessage('Please sign in again before using PayPal.'); return; }
-    const res = await fetch('/api/orders/paypal/create', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ pluginId: plugin.id })
-    });
-    const body = await res.json();
-    if (!res.ok || !body.approveUrl) {
+
+    try {
+      const token = await authToken();
+      if (!token) {
+        setActionMessage('Please sign in again before using PayPal.');
+        return;
+      }
+
+      const res = await fetch('/api/orders/paypal/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ pluginId: plugin.id })
+      });
+
+      let body: { approveUrl?: string; error?: string } = {};
+      try {
+        body = await res.json();
+      } catch {
+        body = {};
+      }
+
+      if (!res.ok || !body.approveUrl) {
+        setActionMessage(body.error || `Could not start PayPal checkout (HTTP ${res.status}).`);
+        return;
+      }
+
+      // PayPal approval happens on paypal.com. assign() makes the navigation explicit
+      // and avoids popup blockers because this runs directly from the button click flow.
+      window.location.assign(body.approveUrl);
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : 'Could not connect to PayPal. Please try again.');
+    } finally {
       setPaypalBusy(false);
-      setActionMessage(body.error || 'Could not start PayPal checkout.');
-      return;
     }
-    window.location.href = body.approveUrl;
   }
 
   if (loading) {
@@ -382,6 +405,10 @@ export default function PluginDetailPage() {
               <WalletCards size={24} />
               <div><span>CHECKOUT</span><h2>Choose Payment Method</h2><p>{plugin.name} · ₱{price.toLocaleString()}</p></div>
             </div>
+
+            {actionMessage && (
+              <div className="paymentInlineMessage" role="alert">{actionMessage}</div>
+            )}
 
             {!gcashOrder ? (
               <div className="paymentChoices">
