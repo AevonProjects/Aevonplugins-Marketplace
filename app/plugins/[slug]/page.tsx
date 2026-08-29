@@ -27,8 +27,10 @@ import {
   Tag
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { getPluginDisplayTitle } from "@/lib/pluginDisplay";
 import { paymentConfig } from "@/lib/paymentConfig";
 import PluginReviews from "@/components/PluginReviews";
+import PluginUsageStats from "@/components/PluginUsageStats";
 
 type PluginRow = {
   id: string;
@@ -319,8 +321,7 @@ export default function PluginDetailPage() {
       <header className="resourcePluginHeader">
         <div className="resourceTitleBlock">
           <div className="resourceTitleLine">
-            <h1>{plugin.name}</h1>
-            <span className="resourceVersion">v{plugin.version || "1.0.0"}</span>
+            <h1>{getPluginDisplayTitle(plugin.name, plugin.version)}</h1>
           </div>
           <div className="resourceSubline">
             <BadgeCheck size={14} /> Official Aevon Marketplace Plugin
@@ -333,6 +334,7 @@ export default function PluginDetailPage() {
       <nav className="resourceTabs" aria-label="Plugin navigation">
         <a className="active" href="#overview">Overview</a>
         <a href="#versions">Version History</a>
+        {plugin.slug === "alicense" && <a href="#usage">Usage</a>}
         {plugin.wiki_url && <a href={plugin.wiki_url} target="_blank" rel="noreferrer">Wiki <ExternalLink size={12}/></a>}
         {plugin.youtube_url && <a href={plugin.youtube_url} target="_blank" rel="noreferrer">YouTube Tutorial <ExternalLink size={12}/></a>}
         {plugin.discord_url && <a href={plugin.discord_url} target="_blank" rel="noreferrer">Discord <ExternalLink size={12}/></a>}
@@ -440,6 +442,8 @@ export default function PluginDetailPage() {
           )}
         </aside>
       </div>
+
+      {plugin.slug === "alicense" && <PluginUsageStats pluginId={plugin.id} />}
 
       <section className="versionHistoryPanel" id="versions">
         <div className="versionHistoryHeader">

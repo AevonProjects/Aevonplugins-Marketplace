@@ -15,8 +15,10 @@ import {
   XCircle,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { getPluginDisplayTitle } from "@/lib/pluginDisplay";
 import RichTextEditor from "@/components/RichTextEditor";
 import AdminVerificationPanel from "@/components/AdminVerificationPanel";
+import AdminLicenseManager from "@/components/AdminLicenseManager";
 
 type PluginRow = {
   id: string;
@@ -498,6 +500,8 @@ export default function AdminPage() {
               </div>
             )}
           </section>
+
+          <AdminLicenseManager />
 
           <section className="adminListSection paymentOrdersSection">
             <div className="sectionHeading">

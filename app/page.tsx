@@ -7,6 +7,7 @@ import {
   ShieldCheck, Zap, Headphones, BadgeCheck
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { getPluginDisplayTitle } from "@/lib/pluginDisplay";
 
 type PluginRow = {
   id: string;
@@ -135,7 +136,7 @@ export default function MarketplacePage() {
                       {index === 0 && <span className="newBadge">NEW</span>}
                     </div>
                     <div className="marketCardBody">
-                      <div className="marketCardHeading"><h3>{plugin.name}</h3><span>v{plugin.version || "1.0.0"}</span></div>
+                      <div className="marketCardHeading"><h3>{getPluginDisplayTitle(plugin.name, plugin.version)}</h3></div>
                       <p>{plugin.description || "Official Aevon plugin."}</p>
                       <div className="marketCardBottom">
                         <strong className={Number(plugin.price) > 0 ? "paid" : "free"}>{Number(plugin.price) > 0 ? `₱${Number(plugin.price).toLocaleString()}` : "FREE"}</strong>

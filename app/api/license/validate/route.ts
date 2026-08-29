@@ -28,7 +28,7 @@ export async function POST(request: Request) {
   const admin = getSupabaseAdmin();
   const { data: license, error } = await admin
     .from("licenses")
-    .select("id,status,server_id,activated_at,plugin_id,plugins(name,slug)")
+    .select("id,status,server_id,activated_at,plugin_id,user_id,license_key,plugins(name,slug)")
     .eq("license_key", licenseKey)
     .maybeSingle();
 
@@ -70,12 +70,25 @@ export async function POST(request: Request) {
 
   await admin.from("licenses").update({ last_validated_at: now }).eq("id", license.id);
 
+  // Resolve a friendly marketplace account name for the server-console acknowledgement.
+  // We intentionally do not return the customer's email or legal verification details.
+  const { data: profile } = await admin
+    .from("profiles")
+    .select("nickname,display_name,username")
+    .eq("id", license.user_id)
+    .maybeSingle();
+  const ownerName = String(profile?.nickname || profile?.display_name || profile?.username || "Marketplace Customer").trim().slice(0, 80);
+
   return NextResponse.json({
     valid: true,
     message: "License active.",
     product: "ALicense",
     version,
     activated: true,
+    ownerName,
+    // The plugin already knows the full key from config.yml; the API only returns a masked display value.
+    licenseDisplay: `${licenseKey.slice(0, 10)}••••••${licenseKey.slice(-6)}`,
+    serverBinding: "this-server-only",
     checkedAt: now
   }, { headers: { "Cache-Control": "no-store" } });
 }
