@@ -17,6 +17,7 @@ type PluginRow = {
   version: string | null;
   price: number;
   status: string;
+  profile_image_url?: string | null;
 };
 
 export default function MarketplacePage() {
@@ -40,7 +41,7 @@ export default function MarketplacePage() {
 
       const { data, error } = await supabase
         .from("plugins")
-        .select("id,name,slug,description,version,price,status")
+        .select("id,name,slug,description,version,price,status,profile_image_url")
         .eq("status", "published")
         .order("created_at", { ascending: false });
 
@@ -150,8 +151,14 @@ export default function MarketplacePage() {
                   <article className={index === activeIndex ? "marketPluginCard active" : "marketPluginCard"} key={plugin.id} onClick={() => setActiveIndex(index)}>
                     <div className="marketCardVisual">
                       <div className="marketCardGlow" />
-                      <img src="/assets/aevon-bird.png" alt="" />
-                      <span className="marketCardInitial">{plugin.name.slice(0, 1).toUpperCase()}</span>
+                      {plugin.profile_image_url ? (
+                        <img className="marketPluginProfileImage" src={plugin.profile_image_url} alt={`${plugin.name} profile`} />
+                      ) : (
+                        <>
+                          <img src="/assets/aevon-bird.png" alt="" />
+                          <span className="marketCardInitial">{plugin.name.slice(0, 1).toUpperCase()}</span>
+                        </>
+                      )}
                       {index === 0 && <span className="newBadge">NEW</span>}
                     </div>
                     <div className="marketCardBody">
