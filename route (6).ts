@@ -1,8 +1,46 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/server/supabaseAdmin';
-function safeName(v:string){return v.replace(/[^a-zA-Z0-9._-]/g,'_').slice(-180)}
+
+const allowedTypes = new Set(['stable','hotfix','beta','legacy']);
+
 export async function POST(request:Request,{params}:{params:Promise<{id:string}>}){
- const auth=await requireAdmin(request); if('error'in auth)return NextResponse.json({error:auth.error},{status:auth.status}); const {id}=await params; const body=await request.json(); const name=safeName(String(body.fileName||'plugin.jar')); const path=`${id}/${Date.now()}-${name}`;
- const {data,error}=await auth.admin.storage.from('plugin-files').createSignedUploadUrl(path); if(error||!data)return NextResponse.json({error:error?.message||'Could not prepare upload.'},{status:500});
- return NextResponse.json({path:data.path,token:data.token});
+ const auth=await requireAdmin(request); if('error'in auth)return NextResponse.json({error:auth.error},{status:auth.status});
+ const {id}=await params;
+ const b=await request.json();
+ const version=String(b.version||'').trim();
+ const releaseType=allowedTypes.has(String(b.releaseType||''))?String(b.releaseType):'stable';
+ const changelog=String(b.changelog||'').trim().slice(0,8000) || null;
+ if(!b.path||!b.fileName||!version)return NextResponse.json({error:'Missing release metadata.'},{status:400});
+
+ const {data:existing}=await auth.admin.from('plugin_versions').select('id').eq('plugin_id',id).eq('version',version).maybeSingle();
+ if(existing)return NextResponse.json({error:`Version ${version} already exists. Use a new version number so the old release remains available.`},{status:409});
+
+ const {data:plugin,error:pluginError}=await auth.admin.from('plugins').select('status').eq('id',id).maybeSingle();
+ if(pluginError||!plugin)return NextResponse.json({error:pluginError?.message||'Plugin not found.'},{status:404});
+
+ const {error:clearError}=await auth.admin.from('plugin_versions').update({is_latest:false}).eq('plugin_id',id);
+ if(clearError)return NextResponse.json({error:clearError.message},{status:400});
+
+ const {error:insertError}=await auth.admin.from('plugin_versions').insert({
+   plugin_id:id,
+   version,
+   release_type:releaseType,
+   changelog,
+   file_path:b.path,
+   file_name:b.fileName,
+   file_size:Number(b.fileSize)||null,
+   is_latest:true,
+   is_published:plugin.status==='published'
+ });
+ if(insertError)return NextResponse.json({error:insertError.message},{status:400});
+
+ const {error}=await auth.admin.from('plugins').update({
+   version,
+   file_path:b.path,
+   file_name:b.fileName,
+   file_size:Number(b.fileSize)||null,
+   updated_at:new Date().toISOString()
+ }).eq('id',id);
+ if(error)return NextResponse.json({error:error.message},{status:400});
+ return NextResponse.json({ok:true});
 }

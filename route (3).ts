@@ -1,24 +1,24 @@
-import { randomBytes } from 'crypto';
-import { NextResponse } from 'next/server';
-import { requireUser } from '@/lib/server/supabaseAdmin';
+import { NextResponse } from "next/server";
+import { requireUser } from "@/lib/server/supabaseAdmin";
 
-function licenseKey(){return `AEVN-${randomBytes(5).toString('hex').toUpperCase()}-${randomBytes(5).toString('hex').toUpperCase()}`;}
+const allowed = new Set(["image/jpeg", "image/png", "image/webp"]);
 
-export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireUser(request); if ('error' in auth) return NextResponse.json({error:auth.error},{status:auth.status});
-  const { id } = await params;
-  const { data: plugin } = await auth.admin.from('plugins').select('id,price,status').eq('id',id).maybeSingle();
-  if (!plugin || plugin.status !== 'published') return NextResponse.json({error:'Plugin is unavailable.'},{status:404});
-  if (Number(plugin.price) !== 0) return NextResponse.json({error:'Only free plugins can be claimed directly.'},{status:400});
-  const { data: existing } = await auth.admin.from('user_plugins').select('id').eq('user_id',auth.user.id).eq('plugin_id',id).maybeSingle();
-  if (!existing) {
-    const { error } = await auth.admin.from('user_plugins').insert({user_id:auth.user.id,plugin_id:id,access_type:'grant'});
-    if (error && error.code !== '23505') return NextResponse.json({error:error.message},{status:400});
-  }
-  const { data: existingLicense } = await auth.admin.from('licenses').select('id').eq('user_id',auth.user.id).eq('plugin_id',id).maybeSingle();
-  if (!existingLicense) {
-    const { error } = await auth.admin.from('licenses').insert({user_id:auth.user.id,plugin_id:id,license_key:licenseKey(),status:'active'});
-    if (error && error.code !== '23505') return NextResponse.json({error:error.message},{status:400});
-  }
-  return NextResponse.json({ok:true});
+export async function POST(request: Request) {
+  const auth = await requireUser(request);
+  if ("error" in auth) return NextResponse.json({ error: auth.error }, { status: auth.status });
+
+  const body = await request.json().catch(() => ({}));
+  const fileName = String(body.fileName || "avatar.jpg");
+  const contentType = String(body.contentType || "");
+  const size = Number(body.size || 0);
+  if (!allowed.has(contentType)) return NextResponse.json({ error: "Profile picture must be JPG, PNG, or WEBP." }, { status: 400 });
+  if (!Number.isFinite(size) || size <= 0 || size > 5 * 1024 * 1024) return NextResponse.json({ error: "Profile picture must be 5 MB or smaller." }, { status: 400 });
+
+  const ext = contentType === "image/png" ? "png" : contentType === "image/webp" ? "webp" : "jpg";
+  const path = `${auth.user.id}/avatar-${Date.now()}.${ext}`;
+  const { data, error } = await auth.admin.storage.from("profile-avatars").createSignedUploadUrl(path);
+  if (error || !data) return NextResponse.json({ error: error?.message || "Could not prepare profile picture upload." }, { status: 500 });
+
+  const { data: publicData } = auth.admin.storage.from("profile-avatars").getPublicUrl(path);
+  return NextResponse.json({ path, token: data.token, publicUrl: publicData.publicUrl, originalName: fileName });
 }

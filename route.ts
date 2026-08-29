@@ -1,14 +1,17 @@
-import { NextResponse } from 'next/server';
-import { requireUser } from '@/lib/server/supabaseAdmin';
-export async function POST(request: Request,{params}:{params:Promise<{id:string}>}){
- const auth=await requireUser(request); if('error'in auth)return NextResponse.json({error:auth.error},{status:auth.status}); const {id}=await params;
- const {data:profile}=await auth.admin.from('profiles').select('role').eq('id',auth.user.id).maybeSingle();
- const isAdmin=profile?.role==='admin';
- if(!isAdmin){const {data:access}=await auth.admin.from('user_plugins').select('id').eq('user_id',auth.user.id).eq('plugin_id',id).maybeSingle(); if(!access)return NextResponse.json({error:'You do not own this plugin.'},{status:403});}
- const {data:plugin}=await auth.admin.from('plugins').select('file_path,file_name').eq('id',id).maybeSingle();
- if(!plugin?.file_path)return NextResponse.json({error:'No downloadable file has been uploaded for this plugin yet.'},{status:404});
- if(!isAdmin){const {data:lic}=await auth.admin.from('licenses').select('id,status,download_count').eq('user_id',auth.user.id).eq('plugin_id',id).maybeSingle(); if(!lic||lic.status!=='active')return NextResponse.json({error:'Your license is not active.'},{status:403}); await auth.admin.from('licenses').update({download_count:(lic.download_count||0)+1,last_download_at:new Date().toISOString()}).eq('id',lic.id);}
- const {data,error}=await auth.admin.storage.from('plugin-files').createSignedUrl(plugin.file_path,60,{download:plugin.file_name||true});
- if(error||!data?.signedUrl)return NextResponse.json({error:error?.message||'Could not create download.'},{status:500});
- return NextResponse.json({url:data.signedUrl,fileName:plugin.file_name});
+import { NextResponse } from 'next/server'; import { requireUser } from '@/lib/server/supabaseAdmin';
+const okTypes=['image/jpeg','image/png','image/webp','application/pdf'];
+export async function POST(request:Request){
+ const auth=await requireUser(request); if('error'in auth)return NextResponse.json({error:auth.error},{status:auth.status});
+ const b=await request.json().catch(()=>({})); const legal=String(b.legalName||'').trim(); const id=String(b.idDocumentPath||''); const selfie=String(b.selfiePath||'');
+ if(legal.length<3||!id.startsWith(auth.user.id+'/')||!selfie.startsWith(auth.user.id+'/'))return NextResponse.json({error:'Complete all verification fields.'},{status:400});
+ const {data:pending}=await auth.admin.from('verification_applications').select('id').eq('user_id',auth.user.id).eq('status','pending').maybeSingle(); if(pending)return NextResponse.json({error:'You already have a verification application under review.'},{status:409});
+ const {data,error}=await auth.admin.from('verification_applications').insert({user_id:auth.user.id,legal_name:legal,id_document_path:id,selfie_path:selfie}).select('id,status,created_at').single();
+ if(!error)await auth.admin.from('profiles').update({verification_status:'pending'}).eq('id',auth.user.id);
+ return error?NextResponse.json({error:error.message},{status:500}):NextResponse.json({application:data});
+}
+export async function PUT(request:Request){
+ const auth=await requireUser(request); if('error'in auth)return NextResponse.json({error:auth.error},{status:auth.status}); const b=await request.json().catch(()=>({}));
+ const kind=b.kind==='selfie'?'selfie':'id'; const type=String(b.contentType||''); const size=Number(b.size||0); if(!okTypes.includes(type)||size<=0||size>8*1024*1024)return NextResponse.json({error:'Use JPG, PNG, WEBP, or PDF up to 8 MB.'},{status:400});
+ const ext=type==='application/pdf'?'pdf':type.split('/')[1].replace('jpeg','jpg'); const path=`${auth.user.id}/${kind}-${Date.now()}.${ext}`;
+ const {data,error}=await auth.admin.storage.from('verification-documents').createSignedUploadUrl(path); return error?NextResponse.json({error:error.message},{status:500}):NextResponse.json({path,token:data.token});
 }

@@ -1,0 +1,38 @@
+import { NextResponse } from "next/server";
+import { getSupabaseAdmin } from "@/lib/server/supabaseAdmin";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
+  const { id } = await context.params;
+  const admin = getSupabaseAdmin();
+  const { data: plugin } = await admin.from("plugins").select("id,name,slug,status").eq("id", id).maybeSingle();
+  if (!plugin || plugin.status !== "published" || (plugin.slug !== "alicense" && String(plugin.name).toLowerCase() !== "alicense")) {
+    return NextResponse.json({ error: "Usage statistics are not available for this plugin." }, { status: 404 });
+  }
+
+  const [{ data: totals, error: totalsError }, { data: series, error: seriesError }] = await Promise.all([
+    admin.rpc("get_alicense_usage_totals"),
+    admin.rpc("get_alicense_usage_stats", { days_back: 30 }),
+  ]);
+
+  if (totalsError || seriesError) {
+    return NextResponse.json({ error: "Usage statistics are temporarily unavailable." }, { status: 503, headers: { "Cache-Control": "no-store" } });
+  }
+
+  const t = Array.isArray(totals) ? totals[0] : totals;
+  return NextResponse.json({
+    totals: {
+      totalServers: Number(t?.total_servers || 0),
+      activeServers: Number(t?.active_servers || 0),
+      uniquePlayers: Number(t?.unique_players || 0),
+    },
+    series: (series || []).map((row: any) => ({
+      date: row.usage_date,
+      servers: Number(row.servers || 0),
+      players: Number(row.players || 0),
+    })),
+    activeWindowDays: 7,
+  }, { headers: { "Cache-Control": "public, max-age=60, s-maxage=300" } });
+}

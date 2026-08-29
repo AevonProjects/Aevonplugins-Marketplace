@@ -1,3 +1,57 @@
-import { NextResponse } from 'next/server'; import { requireUser,getSupabaseAdmin } from '@/lib/server/supabaseAdmin';
-export async function GET(_r:Request,{params}:{params:Promise<{pluginId:string}>}){const {pluginId}=await params;const a=getSupabaseAdmin();const {data,error}=await a.from('plugin_reviews').select('id,user_id,rating,feedback,created_at,updated_at').eq('plugin_id',pluginId).order('created_at',{ascending:false});if(error)return NextResponse.json({reviews:[],error:error.message},{status:500});const ids=[...new Set((data||[]).map((x:any)=>x.user_id))];const {data:profiles}=ids.length?await a.from('profiles').select('id,nickname,avatar_url,verification_status').in('id',ids):{data:[] as any[]};const map=new Map((profiles||[]).map((x:any)=>[x.id,x]));return NextResponse.json({reviews:(data||[]).map((x:any)=>({...x,profiles:map.get(x.user_id)||null}))});}
-export async function POST(r:Request,{params}:{params:Promise<{pluginId:string}>}){const auth=await requireUser(r);if('error'in auth)return NextResponse.json({error:auth.error},{status:auth.status});const {pluginId}=await params;const {data:own}=await auth.admin.from('user_plugins').select('id').eq('user_id',auth.user.id).eq('plugin_id',pluginId).maybeSingle();if(!own)return NextResponse.json({error:'Only customers who have purchased this plugin can submit a review.'},{status:403});const b=await r.json().catch(()=>({}));const rating=Number(b.rating),feedback=String(b.feedback||'').trim();if(!Number.isInteger(rating)||rating<1||rating>5||feedback.length<3||feedback.length>2000)return NextResponse.json({error:'Choose 1–5 stars and write 3–2000 characters.'},{status:400});const {data,error}=await auth.admin.from('plugin_reviews').upsert({plugin_id:pluginId,user_id:auth.user.id,rating,feedback,updated_at:new Date().toISOString()},{onConflict:'plugin_id,user_id'}).select().single();return error?NextResponse.json({error:error.message},{status:500}):NextResponse.json({review:data});}
+import { NextResponse } from "next/server";
+import { requireUser } from "@/lib/server/supabaseAdmin";
+
+export async function PATCH(request: Request) {
+  const auth = await requireUser(request);
+  if ("error" in auth) return NextResponse.json({ error: auth.error }, { status: auth.status });
+
+  const body = await request.json().catch(() => ({}));
+  const now = new Date().toISOString();
+  const patch: Record<string, unknown> = { updated_at: now };
+
+  // Read through the service-role client so profile updates never depend on browser RLS.
+  const currentResult = await auth.admin
+    .from("profiles")
+    .select("nickname,nickname_changed_at")
+    .eq("id", auth.user.id)
+    .maybeSingle();
+  if (currentResult.error) return NextResponse.json({ error: currentResult.error.message }, { status: 500 });
+
+  if (typeof body.nickname === "string") {
+    const nickname = body.nickname.trim();
+    if (nickname.length < 2 || nickname.length > 32) return NextResponse.json({ error: "Nickname must be 2–32 characters." }, { status: 400 });
+
+    const oldNickname = String(currentResult.data?.nickname || "").trim();
+    if (nickname !== oldNickname) {
+      const changedAt = currentResult.data?.nickname_changed_at;
+      if (changedAt && Date.now() - new Date(changedAt).getTime() < 30 * 86400000) {
+        const availableAt = new Date(new Date(changedAt).getTime() + 30 * 86400000);
+        return NextResponse.json({ error: `Nickname can only be changed once every 30 days. You can change it again on ${availableAt.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}.` }, { status: 429 });
+      }
+      patch.nickname = nickname;
+      patch.nickname_changed_at = now;
+    }
+  }
+
+  if (typeof body.avatar_url === "string" && body.avatar_url.startsWith("http")) patch.avatar_url = body.avatar_url;
+
+  let result;
+  if (currentResult.data) {
+    result = await auth.admin
+      .from("profiles")
+      .update(patch)
+      .eq("id", auth.user.id)
+      .select("nickname,avatar_url,nickname_changed_at,verification_status")
+      .single();
+  } else {
+    result = await auth.admin
+      .from("profiles")
+      .insert({ id: auth.user.id, ...patch })
+      .select("nickname,avatar_url,nickname_changed_at,verification_status")
+      .single();
+  }
+
+  return result.error
+    ? NextResponse.json({ error: result.error.message }, { status: 500 })
+    : NextResponse.json({ profile: result.data });
+}

@@ -1,38 +1,29 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+import { requireUser } from "@/lib/server/supabaseAdmin";
 
-const MINECRAFT_SERVER = "aevonsmp.online";
-export const dynamic = "force-dynamic";
+export async function PATCH(request: Request) {
+  const auth = await requireUser(request);
+  if ("error" in auth) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
-export async function GET() {
-  const minecraft = {
-    address: MINECRAFT_SERVER,
-    available: false,
-    online: false,
-    playersOnline: 0,
-    playersMax: 0,
-    version: null as string | null,
-  };
+  const body = await request.json().catch(() => ({}));
+  const currentPassword = String(body.currentPassword || "");
+  const newPassword = String(body.newPassword || "");
+  if (!auth.user.email) return NextResponse.json({ error: "This account does not have an email address." }, { status: 400 });
+  if (!currentPassword) return NextResponse.json({ error: "Enter your current password first." }, { status: 400 });
+  if (newPassword.length < 8) return NextResponse.json({ error: "New password must be at least 8 characters." }, { status: 400 });
+  if (currentPassword === newPassword) return NextResponse.json({ error: "Choose a new password that is different from your current password." }, { status: 400 });
 
-  try {
-    const response = await fetch(
-      `https://api.mcstatus.io/v2/status/java/${encodeURIComponent(MINECRAFT_SERVER)}?query=false&timeout=4`,
-      { cache: "no-store", signal: AbortSignal.timeout(5000) }
-    );
-    if (response.ok) {
-      const data = await response.json();
-      minecraft.available = true;
-      minecraft.online = Boolean(data?.online);
-      minecraft.playersOnline = Number(data?.players?.online ?? 0);
-      minecraft.playersMax = Number(data?.players?.max ?? 0);
-      minecraft.version = data?.version?.name_clean ?? data?.version?.name_raw ?? null;
-    }
-  } catch {
-    // Status provider failures are intentionally isolated from the storefront.
-  }
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !anonKey) return NextResponse.json({ error: "Supabase is not configured." }, { status: 500 });
 
-  return NextResponse.json({ minecraft, updatedAt: new Date().toISOString() }, {
-    headers: {
-      "Cache-Control": "no-store, max-age=0",
-    },
-  });
+  const verifier = createClient(url, anonKey, { auth: { persistSession: false, autoRefreshToken: false } });
+  const check = await verifier.auth.signInWithPassword({ email: auth.user.email, password: currentPassword });
+  if (check.error) return NextResponse.json({ error: "Current password is incorrect." }, { status: 400 });
+
+  const updated = await auth.admin.auth.admin.updateUserById(auth.user.id, { password: newPassword });
+  if (updated.error) return NextResponse.json({ error: updated.error.message }, { status: 500 });
+
+  return NextResponse.json({ ok: true });
 }

@@ -1,25 +1,30 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/server/supabaseAdmin";
 
-export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   const auth = await requireAdmin(request);
   if ("error" in auth) return NextResponse.json({ error: auth.error }, { status: auth.status });
-  const { id } = await params;
-  let note = "";
-  try { const body = await request.json(); note = String(body?.note || "").trim().slice(0, 500); } catch {}
+  const { id } = await context.params;
+  let body: { status?: string; resetActivation?: boolean };
+  try { body = await request.json(); } catch { return NextResponse.json({ error: "Invalid request." }, { status: 400 }); }
 
-  const { data: order } = await auth.admin.from("marketplace_orders").select("id,status").eq("id", id).maybeSingle();
-  if (!order) return NextResponse.json({ error: "Order not found." }, { status: 404 });
-  if (order.status !== "pending") return NextResponse.json({ error: `Order is ${order.status} and cannot be rejected.` }, { status: 409 });
+  const update: Record<string, unknown> = {};
+  if (body.status !== undefined) {
+    if (!["active", "suspended", "revoked"].includes(body.status)) return NextResponse.json({ error: "Invalid license status." }, { status: 400 });
+    update.status = body.status;
+  }
+  if (body.resetActivation === true) {
+    update.server_id = null;
+    update.activated_at = null;
+    update.last_validated_at = null;
+  }
+  if (!Object.keys(update).length) return NextResponse.json({ error: "No changes requested." }, { status: 400 });
 
-  const now = new Date().toISOString();
-  const { error } = await auth.admin.from("marketplace_orders").update({
-    status: "rejected",
-    admin_note: note || null,
-    reviewed_at: now,
-    reviewed_by: auth.user.id,
-    updated_at: now
-  }).eq("id", id);
+  const { data, error } = await auth.admin.from("licenses").update(update).eq("id", id).select("id,status,server_id,activated_at,last_validated_at").maybeSingle();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ ok: true });
+  if (!data) return NextResponse.json({ error: "License not found." }, { status: 404 });
+  return NextResponse.json({ license: data });
 }
