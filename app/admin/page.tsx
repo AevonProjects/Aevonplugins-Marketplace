@@ -39,6 +39,8 @@ type PluginRow = {
   wiki_url?: string | null;
   youtube_url?: string | null;
   discord_url?: string | null;
+  paper_versions?: string[] | null;
+  purpur_versions?: string[] | null;
 };
 
 type OrderRow = {
@@ -55,6 +57,39 @@ type OrderRow = {
 };
 
 type Notice = { type: "success" | "error" | "info"; text: string } | null;
+
+const SERVER_COMPATIBILITY_VERSIONS = [
+  "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5",
+  "1.21.6", "1.21.7", "1.21.8", "1.21.9", "1.21.10", "1.21.11",
+  "26.1", "26.2"
+];
+
+function CompatibilityDropdown({ label, value, onChange }: { label: string; value: string[]; onChange: (versions: string[]) => void }) {
+  const toggle = (version: string) => {
+    onChange(value.includes(version) ? value.filter((item) => item !== version) : [...value, version]);
+  };
+  return (
+    <label className="compatibilityField">
+      <span>{label}</span>
+      <details className="compatibilityDropdown">
+        <summary>{value.length ? `${value.length} version${value.length === 1 ? "" : "s"} selected` : "Select compatible versions"}</summary>
+        <div className="compatibilityMenu">
+          <div className="compatibilityMenuActions">
+            <button type="button" onClick={() => onChange([...SERVER_COMPATIBILITY_VERSIONS])}>Select all</button>
+            <button type="button" onClick={() => onChange([])}>Clear</button>
+          </div>
+          {SERVER_COMPATIBILITY_VERSIONS.map((serverVersion) => (
+            <label className="compatibilityOption" key={serverVersion}>
+              <input type="checkbox" checked={value.includes(serverVersion)} onChange={() => toggle(serverVersion)} />
+              <span>{serverVersion}</span>
+            </label>
+          ))}
+        </div>
+      </details>
+      <small className="fieldHint">{value.length ? value.join(", ") : "No compatibility selected yet."}</small>
+    </label>
+  );
+}
 
 function makeSlug(value: string) {
   return value
@@ -91,6 +126,8 @@ export default function AdminPage() {
   const [profileImageFile, setProfileImageFile] = useState<File | null>(null);
   const [price, setPrice] = useState("0");
   const [status, setStatus] = useState<"draft" | "published">("published");
+  const [paperVersions, setPaperVersions] = useState<string[]>([]);
+  const [purpurVersions, setPurpurVersions] = useState<string[]>([]);
 
   const editingPlugin = useMemo(
     () => plugins.find((plugin) => plugin.id === editingId) ?? null,
@@ -110,6 +147,8 @@ export default function AdminPage() {
     setJarFile(null); setGalleryFiles([null, null, null]); setProfileImageFile(null);
     setPrice("0");
     setStatus("published");
+    setPaperVersions([]);
+    setPurpurVersions([]);
   }, []);
 
   const loadPlugins = useCallback(async () => {
@@ -117,7 +156,7 @@ export default function AdminPage() {
     setLoadingPlugins(true);
     const { data, error } = await supabase
       .from("plugins")
-      .select("id,name,slug,description,description_html,version,price,status,created_at,updated_at,file_name,file_path,file_size,gallery_images,profile_image_url,wiki_url,youtube_url,discord_url")
+      .select("id,name,slug,description,description_html,version,price,status,created_at,updated_at,file_name,file_path,file_size,gallery_images,profile_image_url,wiki_url,youtube_url,discord_url,paper_versions,purpur_versions")
       .order("created_at", { ascending: false });
 
     setLoadingPlugins(false);
@@ -245,7 +284,7 @@ export default function AdminPage() {
       setSaving(true); setNotice({ type: "info", text: editingId ? "Saving plugin content and uploads…" : "Creating plugin and uploading content…" });
       const safeHtml = sanitizeRichHtml(descriptionHtml);
       const plain = plainFromHtml(safeHtml) || description.trim();
-      const payload = { name:name.trim(), slug:normalizedSlug, description:plain.slice(0,1000), description_html:safeHtml.trim(), version:editingPlugin ? (editingPlugin.version ?? version.trim()) : version.trim(), price:Number(price)||0, status, wiki_url:wikiUrl.trim()||null, youtube_url:youtubeUrl.trim()||null, discord_url:discordUrl.trim()||null, updated_at:new Date().toISOString() };
+      const payload = { name:name.trim(), slug:normalizedSlug, description:plain.slice(0,1000), description_html:safeHtml.trim(), version:editingPlugin ? (editingPlugin.version ?? version.trim()) : version.trim(), price:Number(price)||0, status, wiki_url:wikiUrl.trim()||null, youtube_url:youtubeUrl.trim()||null, discord_url:discordUrl.trim()||null, paper_versions:paperVersions, purpur_versions:purpurVersions, updated_at:new Date().toISOString() };
       let pluginId = editingId;
       if (editingId) { const r=await supabase.from("plugins").update(payload).eq("id",editingId); if(r.error) throw r.error; }
       else { const r=await supabase.from("plugins").insert(payload).select("id").single(); if(r.error) throw r.error; pluginId=r.data.id; }
@@ -280,6 +319,8 @@ export default function AdminPage() {
     setJarFile(null); setGalleryFiles([null,null,null]); setProfileImageFile(null);
     setPrice(String(plugin.price ?? 0));
     setStatus(plugin.status === "published" ? "published" : "draft");
+    setPaperVersions(plugin.paper_versions ?? []);
+    setPurpurVersions(plugin.purpur_versions ?? []);
     setNotice({ type: "info", text: `Editing ${plugin.name}.` });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -420,6 +461,16 @@ export default function AdminPage() {
               <div className="editorTwoCol">
                 <label>Slug<input value={slug} onChange={(e)=>setSlug(e.target.value)} placeholder={name?makeSlug(name):"alicense"}/></label>
                 <label>Price (PHP)<input type="number" min="0" step="0.01" value={price} onChange={(e)=>setPrice(e.target.value)}/></label>
+              </div>
+              <div className="compatibilityEditorBlock">
+                <div className="compatibilityEditorHeader">
+                  <strong>Server Compatibility</strong>
+                  <p>Choose every Minecraft version this plugin supports. Only Paper and Purpur are listed.</p>
+                </div>
+                <div className="editorTwoCol compatibilityGrid">
+                  <CompatibilityDropdown label="Paper Versions" value={paperVersions} onChange={setPaperVersions} />
+                  <CompatibilityDropdown label="Purpur Versions" value={purpurVersions} onChange={setPurpurVersions} />
+                </div>
               </div>
               <label>{editingPlugin ? "New Release JAR" : "Upload JAR File"} <span className="fieldHint">{editingPlugin?.file_name ? `Current latest: ${editingPlugin.file_name}` : "Required before publishing"}</span>
                 <input type="file" accept=".jar,application/java-archive" onChange={(e)=>setJarFile(e.target.files?.[0]??null)} />
