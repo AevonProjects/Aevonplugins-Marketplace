@@ -44,6 +44,7 @@ type PluginRow = {
   updated_at: string;
   description_html?: string | null;
   gallery_images?: string[] | null;
+  profile_image_url?: string | null;
   wiki_url?: string | null;
   youtube_url?: string | null;
   discord_url?: string | null;
@@ -111,7 +112,7 @@ export default function PluginDetailPage() {
 
       const { data: pluginData, error: pluginError } = await supabase
         .from("plugins")
-        .select("id,name,slug,description,description_html,gallery_images,wiki_url,youtube_url,discord_url,version,price,status,created_at,updated_at")
+        .select("id,name,slug,description,description_html,gallery_images,profile_image_url,wiki_url,youtube_url,discord_url,version,price,status,created_at,updated_at")
         .eq("slug", slug)
         .eq("status", "published")
         .maybeSingle();
@@ -356,7 +357,7 @@ export default function PluginDetailPage() {
 
       <header className="classicResourceHeader">
         <div className="classicResourceIdentity">
-          <div className="classicPluginGlyph"><Package size={25}/></div>
+          {plugin.profile_image_url ? <img className="classicPluginProfileImage" src={plugin.profile_image_url} alt={`${plugin.name} profile`} /> : <div className="classicPluginGlyph"><Package size={25}/></div>}
           <div>
             <div className="classicTitleRow">
               <h1>{getPluginDisplayTitle(plugin.name, plugin.version)}</h1>
