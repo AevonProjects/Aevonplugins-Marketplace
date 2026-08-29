@@ -12,6 +12,10 @@ function json(data: unknown, status = 200) {
   return NextResponse.json(data, { status, headers: { "Cache-Control": "no-store" } });
 }
 
+function normalize(value: unknown) {
+  return String(value || "").trim().toLowerCase().replace(/\s+v?\d+(?:\.\d+){1,3}.*$/i, "").replace(/[^a-z0-9]/g, "");
+}
+
 export async function POST(request: Request) {
   let body: {
     licenseKey?: string;
@@ -25,7 +29,7 @@ export async function POST(request: Request) {
   catch { return json({ accepted: false, error: "Invalid telemetry request." }, 400); }
 
   const licenseKey = String(body.licenseKey || "").trim().toUpperCase();
-  const product = String(body.product || "").trim().toLowerCase();
+  const product = normalize(body.product);
   const installationId = String(body.installationId || "").trim().toLowerCase();
   const version = String(body.version || "").trim().slice(0, 40);
   const onlineCount = Math.max(0, Math.min(100000, Number(body.onlineCount || 0) || 0));
@@ -34,7 +38,7 @@ export async function POST(request: Request) {
     .filter((v) => HASH_RE.test(v))))
     .slice(0, 2000);
 
-  if (!KEY_RE.test(licenseKey) || !UUID_RE.test(installationId) || product !== "alicense") {
+  if (!KEY_RE.test(licenseKey) || !UUID_RE.test(installationId) || product !== "adiscordall") {
     return json({ accepted: false, error: "Telemetry credentials are invalid." }, 403);
   }
 
@@ -49,10 +53,10 @@ export async function POST(request: Request) {
   if (!license || license.status !== "active") return json({ accepted: false, error: "License is not active." }, 403);
 
   const plugin = Array.isArray(license.plugins) ? license.plugins[0] : license.plugins;
-  const pluginName = String((plugin as any)?.name || "").trim().toLowerCase();
-  const pluginSlug = String((plugin as any)?.slug || "").trim().toLowerCase();
-  if (pluginName !== "alicense" && pluginSlug !== "alicense") {
-    return json({ accepted: false, error: "License is not for ALicense." }, 403);
+  const pluginName = normalize((plugin as any)?.name);
+  const pluginSlug = normalize((plugin as any)?.slug);
+  if (pluginName !== "adiscordall" && pluginSlug !== "adiscordall") {
+    return json({ accepted: false, error: "License is not for ADiscordALL." }, 403);
   }
 
   if (String(license.server_id || "").trim().toLowerCase() !== installationId) {
@@ -62,7 +66,7 @@ export async function POST(request: Request) {
   const now = new Date().toISOString();
   const usageDate = now.slice(0, 10);
 
-  const { error: serverError } = await admin.from("alicense_server_usage").upsert({
+  const { error: serverError } = await admin.from("adiscordall_server_usage").upsert({
     license_id: license.id,
     server_id: installationId,
     plugin_version: version || null,
@@ -71,7 +75,7 @@ export async function POST(request: Request) {
   }, { onConflict: "license_id,server_id" });
   if (serverError) return json({ accepted: false, error: "Could not save server usage." }, 503);
 
-  await admin.from("alicense_daily_servers").upsert({
+  await admin.from("adiscordall_daily_servers").upsert({
     usage_date: usageDate,
     license_id: license.id,
     server_id: installationId,
@@ -88,7 +92,7 @@ export async function POST(request: Request) {
       player_hash,
       last_seen_at: now,
     }));
-    await admin.from("alicense_daily_players").upsert(rows, { onConflict: "usage_date,server_id,player_hash" });
+    await admin.from("adiscordall_daily_players").upsert(rows, { onConflict: "usage_date,server_id,player_hash" });
   }
 
   return json({ accepted: true, checkedAt: now });
