@@ -182,7 +182,7 @@ export default function PluginDetailPage() {
 
 
   useEffect(() => {
-    if (!plugin?.id || plugin.slug !== "alicense") {
+    if (!plugin?.id || !["alicense", "adiscordall"].includes(plugin.slug)) {
       setActiveServerCount(null);
       return;
     }
@@ -387,7 +387,7 @@ export default function PluginDetailPage() {
         {plugin.wiki_url && <a href={plugin.wiki_url} target="_blank" rel="noreferrer">Documentation</a>}
         <a href="#reviews">Reviews</a>
         <a href="#versions">Version History</a>
-        {plugin.slug === "alicense" && <a href="#usage">Usage</a>}
+        {["alicense", "adiscordall"].includes(plugin.slug) && <a href="#usage">Usage</a>}
         {plugin.discord_url && <a href={plugin.discord_url} target="_blank" rel="noreferrer">Discussion</a>}
       </nav>
 
@@ -471,7 +471,7 @@ export default function PluginDetailPage() {
             <PluginReviews pluginId={plugin.id} owned={owned} signedIn={signedIn} />
           </div>
 
-          {plugin.slug === "alicense" && (
+          {["alicense", "adiscordall"].includes(plugin.slug) && (
             <div className="classicBottomUsage">
               <PluginUsageStats pluginId={plugin.id} />
             </div>
