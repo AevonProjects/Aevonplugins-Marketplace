@@ -35,6 +35,7 @@ type PluginRow = {
   file_size?: number | null;
   description_html?: string | null;
   gallery_images?: string[] | null;
+  profile_image_url?: string | null;
   wiki_url?: string | null;
   youtube_url?: string | null;
   discord_url?: string | null;
@@ -87,6 +88,7 @@ export default function AdminPage() {
   const [discordUrl, setDiscordUrl] = useState("");
   const [jarFile, setJarFile] = useState<File | null>(null);
   const [galleryFiles, setGalleryFiles] = useState<(File | null)[]>([null, null, null]);
+  const [profileImageFile, setProfileImageFile] = useState<File | null>(null);
   const [price, setPrice] = useState("0");
   const [status, setStatus] = useState<"draft" | "published">("published");
 
@@ -105,7 +107,7 @@ export default function AdminPage() {
     setReleaseType("stable");
     setReleaseNotes("");
     setWikiUrl(""); setYoutubeUrl(""); setDiscordUrl("");
-    setJarFile(null); setGalleryFiles([null, null, null]);
+    setJarFile(null); setGalleryFiles([null, null, null]); setProfileImageFile(null);
     setPrice("0");
     setStatus("published");
   }, []);
@@ -115,7 +117,7 @@ export default function AdminPage() {
     setLoadingPlugins(true);
     const { data, error } = await supabase
       .from("plugins")
-      .select("id,name,slug,description,description_html,version,price,status,created_at,updated_at,file_name,file_path,file_size,gallery_images,wiki_url,youtube_url,discord_url")
+      .select("id,name,slug,description,description_html,version,price,status,created_at,updated_at,file_name,file_path,file_size,gallery_images,profile_image_url,wiki_url,youtube_url,discord_url")
       .order("created_at", { ascending: false });
 
     setLoadingPlugins(false);
@@ -232,13 +234,14 @@ export default function AdminPage() {
     if (!normalizedSlug) { setNotice({ type: "error", text: "Please enter a valid plugin name or slug." }); return; }
     const existingImages = editingPlugin?.gallery_images ?? [];
     const futureImageCount = [0,1,2].filter((i) => Boolean(galleryFiles[i] || existingImages[i])).length;
-    if (status === "published" && futureImageCount < 3) { setNotice({type:"error",text:"Published plugins require 3 carousel images."}); return; }
+    if (futureImageCount > 0 && futureImageCount < 3) { setNotice({type:"error",text:"Carousel pictures are optional, but if you use them you must provide all 3 images."}); return; }
     if (status === "published" && !editingPlugin?.file_name && !jarFile) { setNotice({type:"error",text:"Published plugins require a JAR file."}); return; }
     if (editingPlugin?.file_name && jarFile && version.trim() === (editingPlugin.version ?? "").trim()) { setNotice({type:"error",text:"A new JAR must use a new version number so the current release remains available in Version History."}); return; }
     if (editingPlugin?.file_name && !jarFile && version.trim() !== (editingPlugin.version ?? "").trim()) { setNotice({type:"error",text:"Upload the new JAR when changing the plugin version. Version numbers are tied to releases."}); return; }
     if (jarFile && editingPlugin?.file_name && !releaseNotes.trim()) { setNotice({type:"error",text:"Please add release notes/changelog for the new version."}); return; }
     try {
       for (const f of galleryFiles) if (f) await validateImage(f);
+      if (profileImageFile) await validateImage(profileImageFile);
       setSaving(true); setNotice({ type: "info", text: editingId ? "Saving plugin content and uploads…" : "Creating plugin and uploading content…" });
       const safeHtml = sanitizeRichHtml(descriptionHtml);
       const plain = plainFromHtml(safeHtml) || description.trim();
@@ -248,6 +251,11 @@ export default function AdminPage() {
       else { const r=await supabase.from("plugins").insert(payload).select("id").single(); if(r.error) throw r.error; pluginId=r.data.id; }
       if (!pluginId) throw new Error("Could not determine plugin ID.");
       if (jarFile) await uploadJarById(pluginId, name.trim(), jarFile, version.trim(), releaseType, releaseNotes.trim() || (editingPlugin?.file_name ? "" : "Initial release."));
+      if (profileImageFile) {
+        const profileUrl = await uploadMedia(pluginId, profileImageFile);
+        const r = await supabase.from("plugins").update({profile_image_url:profileUrl,updated_at:new Date().toISOString()}).eq("id",pluginId);
+        if (r.error) throw r.error;
+      }
       if (galleryFiles.some(Boolean)) {
         const urls:string[]=[];
         for (let i=0;i<3;i++) { const f=galleryFiles[i]; if(f) urls[i]=await uploadMedia(pluginId,f); else if(existingImages[i]) urls[i]=existingImages[i]; }
@@ -269,7 +277,7 @@ export default function AdminPage() {
     setReleaseType("stable");
     setReleaseNotes("");
     setWikiUrl(plugin.wiki_url ?? ""); setYoutubeUrl(plugin.youtube_url ?? ""); setDiscordUrl(plugin.discord_url ?? "");
-    setJarFile(null); setGalleryFiles([null,null,null]);
+    setJarFile(null); setGalleryFiles([null,null,null]); setProfileImageFile(null);
     setPrice(String(plugin.price ?? 0));
     setStatus(plugin.status === "published" ? "published" : "draft");
     setNotice({ type: "info", text: `Editing ${plugin.name}.` });
@@ -424,8 +432,17 @@ export default function AdminPage() {
               <label>Full Plugin Description <span className="fieldHint">Emojis, bold, italic, underline, fonts, sizes, colors, and lists supported.</span></label>
               <RichTextEditor value={descriptionHtml} onChange={setDescriptionHtml} />
 
+              <div className="profileImageEditorBlock">
+                <div><strong>Plugin Profile Picture</strong><p>Optional · shown on the marketplace card and beside the plugin title · max 5 MB · minimum 500×500 pixels.</p></div>
+                <label className="profileImageUploadSlot">
+                  {editingPlugin?.profile_image_url && !profileImageFile ? <img src={editingPlugin.profile_image_url} alt="Current plugin profile" /> : <div className="profileImagePlaceholder"><UploadCloud size={22}/></div>}
+                  <div><span>{profileImageFile ? "New profile picture selected" : editingPlugin?.profile_image_url ? "Current profile picture" : "Choose profile picture"}</span><small>{profileImageFile?.name || "PNG, JPG, WEBP, or GIF"}</small></div>
+                  <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(e)=>setProfileImageFile(e.target.files?.[0]??null)} />
+                </label>
+              </div>
+
               <div className="galleryEditorBlock">
-                <div><strong>Carousel Pictures</strong><p>Exactly 3 display slots · each image max 5 MB · minimum 500×500 pixels.</p></div>
+                <div><strong>Carousel Pictures</strong><p>Optional · upload either all 3 pictures or none · each image max 5 MB · minimum 500×500 pixels.</p></div>
                 <div className="galleryUploadGrid">{[0,1,2].map((i)=><label className="galleryUploadSlot" key={i}><span>Picture {i+1}</span><input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(e)=>{const next=[...galleryFiles];next[i]=e.target.files?.[0]??null;setGalleryFiles(next)}}/><small>{galleryFiles[i]?.name || editingPlugin?.gallery_images?.[i]?.split('/').pop() || "Choose image"}</small></label>)}</div>
               </div>
 
