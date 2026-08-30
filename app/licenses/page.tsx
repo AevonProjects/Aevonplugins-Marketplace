@@ -42,10 +42,21 @@ export default function LicensesPage() {
       return;
     }
 
-    const { data, error: queryError } = await supabase
+    let { data, error: queryError } = await supabase
       .from("licenses")
       .select("id,license_key,status,download_count,last_download_at,server_id,server_ip,activated_at,last_validated_at,plugins(name,version)")
       .order("created_at", { ascending: false });
+
+    // Older databases may not have server_ip yet. Keep the page usable while
+    // the included Supabase hotfix is being applied.
+    if (queryError && queryError.message.toLowerCase().includes("server_ip")) {
+      const fallback = await supabase
+        .from("licenses")
+        .select("id,license_key,status,download_count,last_download_at,server_id,activated_at,last_validated_at,plugins(name,version)")
+        .order("created_at", { ascending: false });
+      data = fallback.data as typeof data;
+      queryError = fallback.error;
+    }
 
     if (queryError) {
       setMessage("");

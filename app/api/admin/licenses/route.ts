@@ -8,12 +8,23 @@ export async function GET(request: Request) {
   const auth = await requireAdmin(request);
   if ("error" in auth) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
-  const { data: licenses, error } = await auth.admin
+  let result = await auth.admin
     .from("licenses")
     .select("id,user_id,plugin_id,license_key,status,server_id,server_ip,activated_at,last_validated_at,download_count,last_download_at,created_at,plugins(name,slug,version)")
     .order("created_at", { ascending: false })
     .limit(500);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Compatibility with databases created before server_ip was added.
+  if (result.error && result.error.message.toLowerCase().includes("server_ip")) {
+    result = await auth.admin
+      .from("licenses")
+      .select("id,user_id,plugin_id,license_key,status,server_id,activated_at,last_validated_at,download_count,last_download_at,created_at,plugins(name,slug,version)")
+      .order("created_at", { ascending: false })
+      .limit(500) as typeof result;
+  }
+
+  const licenses = result.data;
+  if (result.error) return NextResponse.json({ error: result.error.message }, { status: 500 });
 
   const userIds = Array.from(new Set((licenses || []).map((l: any) => l.user_id).filter(Boolean)));
   const { data: profiles } = userIds.length
@@ -34,6 +45,7 @@ export async function GET(request: Request) {
     const plugin = Array.isArray(l.plugins) ? l.plugins[0] : l.plugins;
     return {
       ...l,
+      server_ip: l.server_ip ?? null,
       customer_email: emailMap.get(l.user_id) || "",
       customer_name: profile.nickname || profile.display_name || profile.username || "",
       plugin_name: plugin?.name || "",

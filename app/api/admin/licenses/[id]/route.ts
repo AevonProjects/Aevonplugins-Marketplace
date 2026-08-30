@@ -24,8 +24,13 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   }
   if (!Object.keys(update).length) return NextResponse.json({ error: "No changes requested." }, { status: 400 });
 
-  const { data, error } = await auth.admin.from("licenses").update(update).eq("id", id).select("id,status,server_id,server_ip,activated_at,last_validated_at").maybeSingle();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  if (!data) return NextResponse.json({ error: "License not found." }, { status: 404 });
-  return NextResponse.json({ license: data });
+  let result = await auth.admin.from("licenses").update(update).eq("id", id).select("id,status,server_id,server_ip,activated_at,last_validated_at").maybeSingle();
+  if (result.error && result.error.message.toLowerCase().includes("server_ip")) {
+    const fallbackUpdate = { ...update };
+    delete fallbackUpdate.server_ip;
+    result = await auth.admin.from("licenses").update(fallbackUpdate).eq("id", id).select("id,status,server_id,activated_at,last_validated_at").maybeSingle() as typeof result;
+  }
+  if (result.error) return NextResponse.json({ error: result.error.message }, { status: 500 });
+  if (!result.data) return NextResponse.json({ error: "License not found." }, { status: 404 });
+  return NextResponse.json({ license: { ...result.data, server_ip: (result.data as any).server_ip ?? null } });
 }

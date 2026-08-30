@@ -53,3 +53,13 @@ with check (bucket_id='profile-avatars' and (storage.foldername(name))[1]=auth.u
 drop policy if exists "Users update own avatar" on storage.objects;
 create policy "Users update own avatar" on storage.objects for update to authenticated
 using (bucket_id='profile-avatars' and (storage.foldername(name))[1]=auth.uid()::text);
+
+-- Compatibility repair for databases where verification_applications already existed
+-- before the review fields above were introduced.
+alter table public.verification_applications
+  add column if not exists rejection_reason text,
+  add column if not exists reviewed_by uuid references auth.users(id) on delete set null,
+  add column if not exists reviewed_at timestamptz,
+  add column if not exists updated_at timestamptz not null default now();
+
+notify pgrst, 'reload schema';

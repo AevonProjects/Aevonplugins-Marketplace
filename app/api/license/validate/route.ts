@@ -63,7 +63,7 @@ export async function POST(request: Request) {
   const now = new Date().toISOString();
 
   if (!boundServer) {
-    const { data: activated, error: activationError } = await admin
+    let activation = await admin
       .from("licenses")
       .update({ server_id: installationId, server_ip: observedIp, activated_at: now, last_validated_at: now })
       .eq("id", license.id)
@@ -71,9 +71,20 @@ export async function POST(request: Request) {
       .select("server_id")
       .maybeSingle();
 
-    if (activationError) return fail("License activation is temporarily unavailable.", 503);
-    if (activated?.server_id) {
-      boundServer = String(activated.server_id).toLowerCase();
+    // Keep validation working on older databases until the server_ip migration is applied.
+    if (activation.error && activation.error.message.toLowerCase().includes("server_ip")) {
+      activation = await admin
+        .from("licenses")
+        .update({ server_id: installationId, activated_at: now, last_validated_at: now })
+        .eq("id", license.id)
+        .is("server_id", null)
+        .select("server_id")
+        .maybeSingle();
+    }
+
+    if (activation.error) return fail("License activation is temporarily unavailable.", 503);
+    if (activation.data?.server_id) {
+      boundServer = String(activation.data.server_id).toLowerCase();
     } else {
       const { data: refreshed } = await admin.from("licenses").select("server_id").eq("id", license.id).maybeSingle();
       boundServer = String(refreshed?.server_id || "").toLowerCase();
@@ -84,7 +95,10 @@ export async function POST(request: Request) {
     return fail("This license is already activated on another server installation.");
   }
 
-  await admin.from("licenses").update({ last_validated_at: now, server_ip: observedIp }).eq("id", license.id);
+  let heartbeat = await admin.from("licenses").update({ last_validated_at: now, server_ip: observedIp }).eq("id", license.id);
+  if (heartbeat.error && heartbeat.error.message.toLowerCase().includes("server_ip")) {
+    heartbeat = await admin.from("licenses").update({ last_validated_at: now }).eq("id", license.id);
+  }
 
   const { data: profile } = await admin
     .from("profiles")
