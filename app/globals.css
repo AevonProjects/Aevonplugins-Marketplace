@@ -260,3 +260,5 @@ html{scroll-behavior:smooth}body{background:#030b13}.shell{display:block;min-hei
 
 /* Admin-only resource deletion controls */
 .adminVersionActions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.adminDeleteVersionBtn{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}.versionReleaseCard.latest .adminDeleteVersionBtn{box-shadow:0 0 0 1px rgba(255,110,120,.08) inset}@media(max-width:700px){.adminVersionActions{width:100%}.adminVersionActions button{flex:1;justify-content:center}}
+
+.classicPurchaseCount span{display:inline-flex;align-items:center;gap:5px}.classicPurchaseCount span svg{color:#3ba7ff}.classicPurchaseCount strong{color:#3ba7ff!important;font-weight:800}.classicPurchaseCount{border-top:1px solid rgba(56,126,169,.24);border-bottom:1px solid rgba(56,126,169,.24)!important}

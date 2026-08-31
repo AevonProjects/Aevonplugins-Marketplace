@@ -25,7 +25,8 @@ import {
   ChevronRight,
   History,
   Tag,
-  Trash2
+  Trash2,
+  Users
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { getPluginDisplayTitle } from "@/lib/pluginDisplay";
@@ -102,6 +103,7 @@ export default function PluginDetailPage() {
   const [versionsLoading, setVersionsLoading] = useState(false);
   const [versionBusy, setVersionBusy] = useState<string | null>(null);
   const [activeServerCount, setActiveServerCount] = useState<number | null>(null);
+  const [totalPurchased, setTotalPurchased] = useState<number | null>(null);
 
   useEffect(() => {
     async function loadPlugin() {
@@ -194,6 +196,24 @@ export default function PluginDetailPage() {
     loadPlugin();
   }, [slug]);
 
+
+  useEffect(() => {
+    if (!plugin?.id) {
+      setTotalPurchased(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/plugins/${plugin.id}/purchase-count`, { cache: "no-store" });
+        const body = await res.json().catch(() => ({}));
+        if (!cancelled && res.ok) setTotalPurchased(Number(body?.totalPurchased ?? 0));
+      } catch {
+        if (!cancelled) setTotalPurchased(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [plugin?.id]);
 
   useEffect(() => {
     if (!plugin?.id || !["alicense", "adiscordall"].includes(plugin.slug)) {
@@ -525,6 +545,7 @@ export default function PluginDetailPage() {
               <div><span>Latest Version:</span><strong>{plugin.version || "1.0.0"}</strong></div>
               <div><span>Last Update:</span><strong>{new Date(plugin.updated_at).toLocaleDateString()}</strong></div>
               <div><span>Price:</span><strong>{price > 0 ? `₱${price.toLocaleString()}` : "Free"}</strong></div>
+              <div className="classicPurchaseCount"><span><Users size={12}/> Total Purchased:</span><strong>{totalPurchased === null ? "—" : totalPurchased.toLocaleString()}</strong></div>
               <div><span>Status:</span><strong className="classicPublished">Published</strong></div>
             </div>
           </section>
