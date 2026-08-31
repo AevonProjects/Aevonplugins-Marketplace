@@ -26,6 +26,7 @@ export default function MarketplacePage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [purchasedPluginIds, setPurchasedPluginIds] = useState<Set<string>>(new Set());
   const railRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -70,6 +71,25 @@ export default function MarketplacePage() {
           ...plugin,
           version: latestByPlugin.get(plugin.id) || plugin.version
         })));
+
+        // Show PURCHASED on paid marketplace cards the signed-in customer already bought.
+        const { data: authData } = await supabase.auth.getUser();
+        if (authData.user) {
+          const { data: purchases, error: purchasesError } = await supabase
+            .from("user_plugins")
+            .select("plugin_id")
+            .eq("user_id", authData.user.id)
+            .eq("access_type", "purchase");
+
+          if (!purchasesError) {
+            setPurchasedPluginIds(new Set((purchases ?? []).map((row: any) => String(row.plugin_id))));
+          } else {
+            console.error("Failed to load purchased marketplace plugins:", purchasesError);
+            setPurchasedPluginIds(new Set());
+          }
+        } else {
+          setPurchasedPluginIds(new Set());
+        }
       }
       setLoading(false);
     }
@@ -165,7 +185,9 @@ export default function MarketplacePage() {
                       <div className="marketCardHeading"><h3>{getPluginDisplayTitle(plugin.name, plugin.version)}</h3></div>
                       <p>{plugin.description || "Official Aevon plugin."}</p>
                       <div className="marketCardBottom">
-                        <strong className={Number(plugin.price) > 0 ? "paid" : "free"}>{Number(plugin.price) > 0 ? `₱${Number(plugin.price).toLocaleString()}` : "FREE"}</strong>
+                        <strong className={purchasedPluginIds.has(plugin.id) ? "purchased" : Number(plugin.price) > 0 ? "paid" : "free"}>
+                          {purchasedPluginIds.has(plugin.id) ? "PURCHASED" : Number(plugin.price) > 0 ? `₱${Number(plugin.price).toLocaleString()}` : "FREE"}
+                        </strong>
                         <Link className="viewPluginBtn" href={`/plugins/${plugin.slug}`}>View Plugin <ArrowRight size={15}/></Link>
                       </div>
                     </div>

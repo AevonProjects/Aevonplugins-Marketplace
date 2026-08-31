@@ -104,6 +104,7 @@ export default function PluginDetailPage() {
   const [versionBusy, setVersionBusy] = useState<string | null>(null);
   const [activeServerCount, setActiveServerCount] = useState<number | null>(null);
   const [totalPurchased, setTotalPurchased] = useState<number | null>(null);
+  const [totalDownloads, setTotalDownloads] = useState<number | null>(null);
 
   useEffect(() => {
     async function loadPlugin() {
@@ -216,6 +217,24 @@ export default function PluginDetailPage() {
   }, [plugin?.id]);
 
   useEffect(() => {
+    if (!plugin?.id) {
+      setTotalDownloads(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/plugins/${plugin.id}/download-count`, { cache: "no-store" });
+        const body = await res.json().catch(() => ({}));
+        if (!cancelled && res.ok) setTotalDownloads(Number(body?.totalDownloads ?? 0));
+      } catch {
+        if (!cancelled) setTotalDownloads(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [plugin?.id]);
+
+  useEffect(() => {
     if (!plugin?.id || !["alicense", "adiscordall"].includes(plugin.slug)) {
       setActiveServerCount(null);
       return;
@@ -272,6 +291,7 @@ export default function PluginDetailPage() {
     const res = await fetch(`/api/plugins/${plugin.id}/download`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
     const body = await res.json(); setActionBusy(false);
     if (!res.ok) return setActionMessage(body.error || "Could not start download.");
+    if (!isAdmin) setTotalDownloads((current) => current === null ? current : current + 1);
     window.location.href = body.url;
   }
 
@@ -284,6 +304,7 @@ export default function PluginDetailPage() {
     const body = await res.json().catch(() => ({}));
     setVersionBusy(null);
     if (!res.ok) return setActionMessage(body.error || "Could not download this version.");
+    if (!isAdmin) setTotalDownloads((current) => current === null ? current : current + 1);
     window.location.href = body.url;
   }
 
@@ -554,7 +575,7 @@ export default function PluginDetailPage() {
             <div className="classicCardTitle"><History size={15}/> VERSION {plugin.version || "1.0.0"}</div>
             <div className="classicInfoRows">
               <div><span>Released:</span><strong>{new Date(plugin.updated_at).toLocaleDateString()}</strong></div>
-              <div><span>Downloads:</span><strong>{license?.download_count ?? "—"}</strong></div>
+              <div><span>Downloads:</span><strong>{totalDownloads === null ? "—" : totalDownloads.toLocaleString()}</strong></div>
               <div><span>Release:</span><strong>{versions.find(v=>v.is_latest)?.release_type || "stable"}</strong></div>
             </div>
             {owned && <button className="classicMiniDownload" onClick={downloadPlugin} disabled={actionBusy}><Download size={14}/> Download Latest</button>}
