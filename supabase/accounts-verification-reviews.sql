@@ -63,3 +63,19 @@ alter table public.verification_applications
   add column if not exists updated_at timestamptz not null default now();
 
 notify pgrst, 'reload schema';
+
+-- Official admin replies to customer plugin reviews.
+create table if not exists public.plugin_review_replies (
+  id uuid primary key default gen_random_uuid(),
+  review_id uuid not null references public.plugin_reviews(id) on delete cascade,
+  admin_user_id uuid not null references auth.users(id) on delete restrict,
+  reply text not null check (char_length(reply) between 2 and 2000),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique(review_id)
+);
+alter table public.plugin_review_replies enable row level security;
+drop policy if exists "Public read admin review replies" on public.plugin_review_replies;
+create policy "Public read admin review replies" on public.plugin_review_replies for select using (true);
+
+notify pgrst, 'reload schema';
