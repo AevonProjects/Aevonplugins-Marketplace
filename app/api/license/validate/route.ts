@@ -107,11 +107,28 @@ export async function POST(request: Request) {
     .maybeSingle();
   const ownerName = String(profile?.nickname || profile?.display_name || profile?.username || "Marketplace Customer").trim().slice(0, 80);
 
+  // Include the newest published marketplace release in the normal license
+  // response too. This is informational only; validation does not depend on it.
+  let latestVersion: string | null = null;
+  let latestReleaseType: string | null = null;
+  const { data: latestRelease } = await admin
+    .from("plugin_versions")
+    .select("version,release_type")
+    .eq("plugin_id", license.plugin_id)
+    .eq("is_published", true)
+    .eq("is_latest", true)
+    .maybeSingle();
+  latestVersion = String(latestRelease?.version || "").trim() || null;
+  latestReleaseType = String(latestRelease?.release_type || "").trim() || null;
+
   return NextResponse.json({
     valid: true,
     message: "License active.",
     product: displayProduct,
     version,
+    latestVersion,
+    latestReleaseType,
+    updateAvailable: Boolean(latestVersion && latestVersion !== version),
     activated: true,
     ownerName,
     licenseDisplay: `${licenseKey.slice(0, 10)}••••••${licenseKey.slice(-6)}`,
