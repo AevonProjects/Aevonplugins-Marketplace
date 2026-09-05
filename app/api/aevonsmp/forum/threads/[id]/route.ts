@@ -52,7 +52,7 @@ export async function DELETE(request:Request,{params}:{params:Promise<{id:string
  const isAdmin=profile?.role==='admin';
  const {data:t}=await auth.admin.from('aevonsmp_forum_threads').select('id,user_id,charge_kind,image_path,video_path').eq('id',id).maybeSingle();
  if(!t)return NextResponse.json({error:'Thread not found.'},{status:404});
- if(!isAdmin&&t.user_id!==auth.user.id)return NextResponse.json({error:'You can only delete your own forum posts.'},{status:403});
+ if(!isAdmin && t.user_id!==auth.user.id)return NextResponse.json({error:'You can only delete your own forum posts.'},{status:403});
  const {data,error}=await auth.admin.rpc('delete_aevonsmp_forum_thread',{p_actor_user_id:auth.user.id,p_thread_id:id,p_is_admin:isAdmin});
  if(error)return NextResponse.json({error:error.message||'Could not delete thread.'},{status:400});
  const mediaPaths=[t.image_path,t.video_path].filter(Boolean) as string[];
