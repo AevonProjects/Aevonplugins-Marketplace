@@ -19,6 +19,7 @@ import { getPluginDisplayTitle } from "@/lib/pluginDisplay";
 import RichTextEditor from "@/components/RichTextEditor";
 import AdminVerificationPanel from "@/components/AdminVerificationPanel";
 import AdminLicenseManager from "@/components/AdminLicenseManager";
+import AdminAevonSMPStore from "@/components/AdminAevonSMPStore";
 
 type PluginRow = {
   id: string;
@@ -568,6 +569,8 @@ export default function AdminPage() {
               </div>
             )}
           </section>
+
+          <AdminAevonSMPStore />
 
           <AdminLicenseManager />
 

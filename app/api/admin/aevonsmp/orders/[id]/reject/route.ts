@@ -1,0 +1,3 @@
+import { NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/server/supabaseAdmin";
+export async function POST(request:Request,{params}:{params:Promise<{id:string}>}){const auth=await requireAdmin(request);if("error" in auth)return NextResponse.json({error:auth.error},{status:auth.status});const {id}=await params;let note="";try{note=String((await request.json())?.note||"").slice(0,1000)}catch{}const {error}=await auth.admin.from("aevonsmp_orders").update({payment_status:"rejected",delivery_status:"cancelled",updated_at:new Date().toISOString(),admin_note:note||null}).eq("id",id).eq("payment_method","gcash").eq("payment_status","pending");return error?NextResponse.json({error:error.message},{status:500}):NextResponse.json({ok:true});}

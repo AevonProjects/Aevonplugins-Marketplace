@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Home, Library, KeyRound, ShieldCheck, LogIn, Menu, X, ChevronDown, LogOut, UserRound, Users, Copy, Check } from "lucide-react";
+import { Home, Library, KeyRound, ShieldCheck, Gamepad2, LogIn, Menu, X, ChevronDown, LogOut, UserRound, Users, Copy, Check } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import type { Session } from "@supabase/supabase-js";
@@ -10,6 +10,7 @@ import BackgroundMusic from "@/components/BackgroundMusic";
 
 const baseLinks = [
   { href: "/", label: "Marketplace", icon: Home },
+  { href: "/aevonsmp", label: "AevonSMP", icon: Gamepad2 },
   { href: "/library", label: "My Library", icon: Library },
   { href: "/licenses", label: "Licenses", icon: KeyRound },
 ];
@@ -147,7 +148,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
                 key={href}
                 href={href}
                 onClick={() => setOpen(false)}
-                className={pathname === href ? "siteNavItem active" : "siteNavItem"}
+                className={(href === "/aevonsmp" ? pathname.startsWith("/aevonsmp") : pathname === href) ? "siteNavItem active" : "siteNavItem"}
               >
                 <Icon size={16} />
                 <span>{label}</span>

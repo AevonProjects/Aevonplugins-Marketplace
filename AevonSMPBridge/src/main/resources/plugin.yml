@@ -1,0 +1,14 @@
+name: AevonSMPBridge
+version: 1.0.0
+main: com.aevon.smpbridge.AevonSMPBridge
+api-version: '1.21'
+author: Klioh_
+description: Secure AevonSMP website store bridge and in-game reward delivery queue.
+commands:
+  asmpbridge:
+    description: Shows AevonSMPBridge status or reloads its configuration.
+    usage: /asmpbridge [reload]
+permissions:
+  aevonsmpbridge.admin:
+    description: Allows AevonSMPBridge administration.
+    default: op

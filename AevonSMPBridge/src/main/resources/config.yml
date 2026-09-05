@@ -1,0 +1,12 @@
+# AevonSMPBridge v1.0.0
+# The website Vercel environment variable AEVONSMP_BRIDGE_SECRET must match bridge-secret exactly.
+website-url: "https://aevonplugins.shop"
+bridge-secret: "CHANGE-ME-TO-A-LONG-RANDOM-SECRET"
+server-id: "aevonsmp-main"
+server-name: "AevonSMP"
+server-address: "aevonsmp.online"
+check-interval-seconds: 5
+request-timeout-seconds: 10
+messages:
+  reward-delivered: "&aYour purchased AevonSMP reward &f{product} &ahas been delivered!"
+  waiting-inventory: "&eYour purchased reward &f{product} &eis waiting. Please free at least &f{slots} &einventory slot(s)."

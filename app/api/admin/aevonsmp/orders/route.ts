@@ -1,0 +1,3 @@
+import { NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/server/supabaseAdmin";
+export async function GET(request:Request){const auth=await requireAdmin(request);if("error" in auth)return NextResponse.json({error:auth.error},{status:auth.status});const {data,error}=await auth.admin.from("aevonsmp_orders").select("id,order_code,customer_email,product_name,quantity,amount,minecraft_ign,payment_method,payment_status,delivery_status,created_at,admin_note").order("created_at",{ascending:false}).limit(200);return error?NextResponse.json({error:error.message},{status:500}):NextResponse.json({orders:data||[]});}
