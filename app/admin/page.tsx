@@ -1,45 +1,625 @@
 "use client";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { BadgeCheck, CheckCircle2, Copy, Heart, Loader2, LogIn, MessageCircle, MessagesSquare, Package, Percent, Pin, PinOff, Server, ShoppingCart, Trash2, UserRound, Users } from "lucide-react";
+
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  CheckCircle2,
+  Edit3,
+  Eye,
+  EyeOff,
+  Loader2,
+  Plus,
+  RefreshCw,
+  ShieldCheck,
+  Trash2,
+  UploadCloud,
+  XCircle,
+} from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import Link from "next/link";
+import { getPluginDisplayTitle } from "@/lib/pluginDisplay";
+import RichTextEditor from "@/components/RichTextEditor";
+import AdminVerificationPanel from "@/components/AdminVerificationPanel";
+import AdminLicenseManager from "@/components/AdminLicenseManager";
+import AdminAevonSMPStore from "@/components/AdminAevonSMPStore";
+import AdminForumCredits from "@/components/AdminForumCredits";
 
-type Product={id:string;name:string;description:string|null;price:number;max_quantity:number;image_url:string|null};
-type ServerState={server_name:string;server_address:string;online:boolean;players_online:number;players_max:number;player_names:string[];minecraft_version:string|null;last_seen_at:string}|null;
-type DiscountInfo={valid:boolean;discountCode:string|null;discountPercent:number;discountAmount:number;subtotal:number;amount:number;verificationDiscountApplied?:boolean;verificationDiscountPercent?:number;verificationPurchasesRemaining?:number;codeDiscountPercent?:number};
+type PluginRow = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  version: string | null;
+  price: number;
+  status: "draft" | "published" | string;
+  created_at: string;
+  updated_at: string;
+  file_name?: string | null;
+  file_path?: string | null;
+  file_size?: number | null;
+  description_html?: string | null;
+  gallery_images?: string[] | null;
+  profile_image_url?: string | null;
+  wiki_url?: string | null;
+  youtube_url?: string | null;
+  discord_url?: string | null;
+  paper_versions?: string[] | null;
+  purpur_versions?: string[] | null;
+};
 
-type CommunityAuthor={nickname?:string|null;avatar_url?:string|null;verification_status?:string|null;role?:string|null}|null;
-type CommunityPost={id:string;user_id:string;title:string;body:string;created_at:string;is_pinned?:boolean;image_url?:string|null;video_url?:string|null;reply_count?:number;author:CommunityAuthor;reaction_counts?:Record<string,number>};
+type OrderRow = {
+  id: string;
+  order_code: string;
+  customer_email: string;
+  amount: number;
+  currency: string;
+  payment_method: string;
+  status: string;
+  created_at: string;
+  plugin_id: string;
+  plugins?: { name?: string } | null;
+};
 
-export default function AevonSMPPage(){
- const [products,setProducts]=useState<Product[]>([]),[server,setServer]=useState<ServerState>(null),[selected,setSelected]=useState<Product|null>(null),[ign,setIgn]=useState(""),[qty,setQty]=useState(1),[method,setMethod]=useState<"paypal"|"gcash">("paypal"),[busy,setBusy]=useState(false),[message,setMessage]=useState(""),[loggedIn,setLoggedIn]=useState(false),[copied,setCopied]=useState(false),[discountCode,setDiscountCode]=useState(""),[discount,setDiscount]=useState<DiscountInfo|null>(null),[discountBusy,setDiscountBusy]=useState(false),[discountMessage,setDiscountMessage]=useState(""),[communityPosts,setCommunityPosts]=useState<CommunityPost[]>([]),[forumViewerRole,setForumViewerRole]=useState<string|null>(null),[forumViewerId,setForumViewerId]=useState<string|null>(null);
- const load=useCallback(async()=>{const session=(await supabase?.auth.getSession())?.data.session;const headers: HeadersInit=session?.access_token?{Authorization:`Bearer ${session.access_token}`}:{ };const [storeRes,forumRes]=await Promise.all([fetch('/api/aevonsmp/products',{cache:'no-store'}),fetch('/api/aevonsmp/forum/threads?limit=6',{headers,cache:'no-store'})]);if(storeRes.ok){const b=await storeRes.json();setProducts(b.products||[]);setServer(b.server||null)}if(forumRes.ok){const b=await forumRes.json();setCommunityPosts(b.threads||[]);setForumViewerRole(b.viewer?.role||null);setForumViewerId(b.viewer?.id||null)}},[]);
- useEffect(()=>{void load();const timer=setInterval(load,10000);void supabase?.auth.getSession().then(({data})=>setLoggedIn(Boolean(data.session)));return()=>clearInterval(timer)},[load]);
- const subtotal=useMemo(()=>selected?Number(selected.price)*qty:0,[selected,qty]);
- const total=discount?.valid?discount.amount:subtotal;
- useEffect(()=>{
-  let cancelled=false;
-  async function refreshPricing(){
-   setDiscount(null);setDiscountMessage("");
-   if(!selected||!loggedIn||!supabase)return;
-   const {data}=await supabase.auth.getSession();const token=data.session?.access_token;if(!token)return;
-   const r=await fetch('/api/aevonsmp/discount/validate',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},body:JSON.stringify({productId:selected.id,quantity:qty,discountCode:''})});
-   const b=await r.json();if(cancelled||!r.ok)return;
-   if(b.verificationDiscountApplied){setDiscount(b);setDiscountMessage(`Fully Verified benefit applied — 50% off. ${Number(b.verificationPurchasesRemaining)} discounted purchase${Number(b.verificationPurchasesRemaining)===1?'':'s'} remaining for this product after this order.`)}
+type Notice = { type: "success" | "error" | "info"; text: string } | null;
+
+const SERVER_COMPATIBILITY_VERSIONS = [
+  "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5",
+  "1.21.6", "1.21.7", "1.21.8", "1.21.9", "1.21.10", "1.21.11",
+  "26.1", "26.2"
+];
+
+function CompatibilityDropdown({ label, value, onChange }: { label: string; value: string[]; onChange: (versions: string[]) => void }) {
+  const toggle = (version: string) => {
+    onChange(value.includes(version) ? value.filter((item) => item !== version) : [...value, version]);
+  };
+  return (
+    <label className="compatibilityField">
+      <span>{label}</span>
+      <details className="compatibilityDropdown">
+        <summary>{value.length ? `${value.length} version${value.length === 1 ? "" : "s"} selected` : "Select compatible versions"}</summary>
+        <div className="compatibilityMenu">
+          <div className="compatibilityMenuActions">
+            <button type="button" onClick={() => onChange([...SERVER_COMPATIBILITY_VERSIONS])}>Select all</button>
+            <button type="button" onClick={() => onChange([])}>Clear</button>
+          </div>
+          {SERVER_COMPATIBILITY_VERSIONS.map((serverVersion) => (
+            <label className="compatibilityOption" key={serverVersion}>
+              <input type="checkbox" checked={value.includes(serverVersion)} onChange={() => toggle(serverVersion)} />
+              <span>{serverVersion}</span>
+            </label>
+          ))}
+        </div>
+      </details>
+      <small className="fieldHint">{value.length ? value.join(", ") : "No compatibility selected yet."}</small>
+    </label>
+  );
+}
+
+function makeSlug(value: string) {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+export default function AdminPage() {
+  const [allowed, setAllowed] = useState(false);
+  const [checking, setChecking] = useState(true);
+  const [notice, setNotice] = useState<Notice>({ type: "info", text: "Checking admin access…" });
+  const [plugins, setPlugins] = useState<PluginRow[]>([]);
+  const [loadingPlugins, setLoadingPlugins] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [orders, setOrders] = useState<OrderRow[]>([]);
+  const [loadingOrders, setLoadingOrders] = useState(false);
+  const [orderBusy, setOrderBusy] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  const [name, setName] = useState("");
+  const [slug, setSlug] = useState("");
+  const [description, setDescription] = useState("");
+  const [descriptionHtml, setDescriptionHtml] = useState("");
+  const [version, setVersion] = useState("1.0.0");
+  const [releaseType, setReleaseType] = useState<"stable" | "hotfix" | "beta" | "legacy">("stable");
+  const [releaseNotes, setReleaseNotes] = useState("");
+  const [wikiUrl, setWikiUrl] = useState("");
+  const [youtubeUrl, setYoutubeUrl] = useState("");
+  const [discordUrl, setDiscordUrl] = useState("");
+  const [jarFile, setJarFile] = useState<File | null>(null);
+  const [galleryFiles, setGalleryFiles] = useState<(File | null)[]>([null, null, null]);
+  const [profileImageFile, setProfileImageFile] = useState<File | null>(null);
+  const [price, setPrice] = useState("0");
+  const [status, setStatus] = useState<"draft" | "published">("published");
+  const [paperVersions, setPaperVersions] = useState<string[]>([]);
+  const [purpurVersions, setPurpurVersions] = useState<string[]>([]);
+
+  const editingPlugin = useMemo(
+    () => plugins.find((plugin) => plugin.id === editingId) ?? null,
+    [editingId, plugins]
+  );
+
+  const resetForm = useCallback(() => {
+    setEditingId(null);
+    setName("");
+    setSlug("");
+    setDescription("");
+    setDescriptionHtml("");
+    setVersion("1.0.0");
+    setReleaseType("stable");
+    setReleaseNotes("");
+    setWikiUrl(""); setYoutubeUrl(""); setDiscordUrl("");
+    setJarFile(null); setGalleryFiles([null, null, null]); setProfileImageFile(null);
+    setPrice("0");
+    setStatus("published");
+    setPaperVersions([]);
+    setPurpurVersions([]);
+  }, []);
+
+  const loadPlugins = useCallback(async () => {
+    if (!supabase) return;
+    setLoadingPlugins(true);
+    const { data, error } = await supabase
+      .from("plugins")
+      .select("id,name,slug,description,description_html,version,price,status,created_at,updated_at,file_name,file_path,file_size,gallery_images,profile_image_url,wiki_url,youtube_url,discord_url,paper_versions,purpur_versions")
+      .order("created_at", { ascending: false });
+
+    setLoadingPlugins(false);
+    if (error) {
+      setNotice({ type: "error", text: `Could not load plugins: ${error.message}` });
+      return;
+    }
+    setPlugins((data ?? []) as PluginRow[]);
+  }, []);
+
+  const loadOrders = useCallback(async () => {
+    if (!supabase) return;
+    setLoadingOrders(true);
+    const { data, error } = await supabase
+      .from("marketplace_orders")
+      .select("id,order_code,customer_email,amount,currency,payment_method,status,created_at,plugin_id,plugins(name)")
+      .eq("payment_method", "gcash")
+      .order("created_at", { ascending: false })
+      .limit(100);
+    setLoadingOrders(false);
+    if (error) {
+      setNotice({ type: "error", text: `Could not load payment orders: ${error.message}` });
+      return;
+    }
+    setOrders((data ?? []) as unknown as OrderRow[]);
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      if (!supabase) {
+        setNotice({ type: "error", text: "Supabase is not configured." });
+        setChecking(false);
+        return;
+      }
+
+      const { data: auth, error: authError } = await supabase.auth.getUser();
+      if (authError || !auth.user) {
+        setNotice({ type: "error", text: "Sign in with your admin account first." });
+        setChecking(false);
+        return;
+      }
+
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      const roleResponse = await fetch("/api/account/me", {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        cache: "no-store",
+      });
+      const rolePayload = await roleResponse.json().catch(() => ({}));
+
+      if (!roleResponse.ok || rolePayload?.profile?.role !== "admin") {
+        setNotice({ type: "error", text: rolePayload?.error || "This account does not have admin access." });
+        setChecking(false);
+        return;
+      }
+
+      setAllowed(true);
+      setChecking(false);
+      setNotice(null);
+      await Promise.all([loadPlugins(), loadOrders()]);
+    })();
+  }, [loadPlugins, loadOrders]);
+
+  function sanitizeRichHtml(html: string) {
+    const root = document.createElement("div"); root.innerHTML = html;
+    root.querySelectorAll("script,iframe,object,embed,link,meta,style").forEach((el)=>el.remove());
+    root.querySelectorAll("*").forEach((el)=>{
+      for (const attr of Array.from(el.attributes)) {
+        const n=attr.name.toLowerCase(); const v=attr.value.trim().toLowerCase();
+        if(n.startsWith("on") || n==="srcdoc" || ((n==="href"||n==="src") && v.startsWith("javascript:"))) el.removeAttribute(attr.name);
+      }
+    });
+    return root.innerHTML;
   }
-  void refreshPricing();return()=>{cancelled=true};
- },[qty,selected,loggedIn]);
- async function applyDiscount(){if(!selected||!discountCode.trim())return;setDiscountBusy(true);setDiscountMessage("");const {data}=await supabase!.auth.getSession();const token=data.session?.access_token;if(!token){setDiscountBusy(false);setDiscountMessage("Please sign in before applying a discount code.");return}const r=await fetch('/api/aevonsmp/discount/validate',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},body:JSON.stringify({productId:selected.id,quantity:qty,discountCode:discountCode.trim()})});const b=await r.json();setDiscountBusy(false);if(!r.ok){setDiscount(null);setDiscountMessage(b.error||'Invalid discount code.');return}setDiscount(b);setDiscountMessage(b.verificationDiscountApplied&&Number(b.codeDiscountPercent||0)<50?`${b.discountCode} linked. Your Fully Verified 50% benefit gives the better price.`:`${b.discountCode} applied — ${Number(b.discountPercent)}% off.`)}
- async function checkout(){if(!selected||!ign.trim())return;setBusy(true);setMessage("");const {data}=await supabase!.auth.getSession();const token=data.session?.access_token;if(!token){setBusy(false);setMessage("Please sign in before placing an order.");return}const url=method==='paypal'?'/api/aevonsmp/orders/paypal/create':'/api/aevonsmp/orders/gcash';const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},body:JSON.stringify({productId:selected.id,minecraftIgn:ign.trim(),quantity:qty,discountCode:discount?.valid?discount.discountCode:null})});const b=await r.json();setBusy(false);if(!r.ok){setMessage(b.error||'Could not create order.');return}if(method==='paypal'&&b.approveUrl){window.location.href=b.approveUrl;return}setMessage(`GCash order ${b.order?.order_code} created. Once an admin approves the payment, the reward is queued automatically.`)}
+  function plainFromHtml(html: string) {
+    const el = document.createElement("div"); el.innerHTML = html; return (el.textContent || "").trim();
+  }
 
- async function adminPinPost(post:CommunityPost){if(forumViewerRole!=='admin')return;const {data}=await supabase!.auth.getSession();const token=data.session?.access_token;if(!token)return;const r=await fetch(`/api/aevonsmp/forum/threads/${post.id}`,{method:'PATCH',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},body:JSON.stringify({is_pinned:!post.is_pinned})});const b=await r.json();if(!r.ok){setMessage(b.error||'Could not update pinned post.');return}await load()}
- async function deleteCommunityPost(post:CommunityPost){if(!(forumViewerRole==='admin'||forumViewerId===post.user_id))return;if(!window.confirm('Delete this community post? All comments, reactions, and attached media will also be removed.'))return;const {data}=await supabase!.auth.getSession();const token=data.session?.access_token;if(!token)return;const r=await fetch(`/api/aevonsmp/forum/threads/${post.id}`,{method:'DELETE',headers:{Authorization:`Bearer ${token}`}});const b=await r.json();if(!r.ok){setMessage(b.error||'Could not delete post.');return}await load()}
- async function copyIp(){await navigator.clipboard.writeText(server?.server_address||'aevonsmp.online');setCopied(true);setTimeout(()=>setCopied(false),1400)}
- return <div className="pageWrap asmpPage">
-  <section className="asmpHero"><div><p className="eyebrow">AEVONSMP</p><h1>Play. Shop. Receive it in-game.</h1><p className="muted">See who is online, browse server products, and send purchased rewards straight to your Minecraft IGN.</p><div className="asmpHeroActions"><button onClick={copyIp} className="primaryBtn"><Copy size={15}/>{copied?'Copied!':server?.server_address||'aevonsmp.online'}</button><a className="secondaryBtn" href="#products"><ShoppingCart size={15}/> Browse Products</a><Link className="secondaryBtn" href="/aevonsmp/forum"><MessagesSquare size={15}/> Community Forum</Link></div></div><div className={`asmpServerCard ${server?.online?'online':'offline'}`}><div className="asmpServerTop"><Server size={24}/><div><small>SERVER STATUS</small><strong>{server?.online?'ONLINE':'OFFLINE'}</strong></div></div><div className="asmpServerStats"><div><Users size={16}/><span><b>{server?.players_online??0}</b>{server?.players_max?` / ${server.players_max}`:''} Players</span></div><div><span>{server?.minecraft_version||'Minecraft'}</span></div></div></div></section>
-  <section className="asmpPlayersSection"><div className="sectionHeading"><div><p className="eyebrow">LIVE PLAYERS</p><h2>Currently Playing</h2></div><span className="asmpLivePill">Updates every 10 seconds</span></div>{server?.online&&server.player_names?.length?<div className="asmpPlayerGrid">{server.player_names.map(n=><div className="asmpPlayer" key={n}><img src={`https://mc-heads.net/avatar/${encodeURIComponent(n)}/48`} alt=""/><span>{n}</span></div>)}</div>:<div className="emptyCard"><Users size={20}/><span>{server?.online?'No players are online right now.':'The server is currently offline or the bridge has not reported yet.'}</span></div>}</section>
-  <section className="asmpCommunityFeed"><div className="sectionHeading"><div><p className="eyebrow">AEVONSMP COMMUNITY</p><h2>Community Posts</h2><p className="muted smallMuted">See what players are sharing right now — pictures, videos, stories, suggestions, and server moments.</p></div><div className="asmpCommunityFeedHeadActions"><Link className="primaryBtn" href="/aevonsmp/forum"><MessagesSquare size={15}/> Create a Post</Link><Link className="secondaryBtn" href="/aevonsmp/forum">View All Posts</Link></div></div><div className="forumFeed">{communityPosts.map(post=>{const reactions=Object.values(post.reaction_counts||{}).reduce((a,b)=>a+Number(b||0),0);return <article className="forumFeedPost" key={post.id}><header className="forumFeedHeader"><div className="forumAuthor">{post.author?.avatar_url?<img src={post.author.avatar_url} alt=""/>:<span className="forumAvatarFallback"><UserRound size={16}/></span>}<span><b>{post.author?.nickname||'Aevon Member'}</b><small>{post.author?.role==='admin'?'AEVON ADMIN':post.author?.verification_status==='verified'?'VERIFIED MEMBER':'AEVON MEMBER'}</small></span>{post.author?.verification_status==='verified'&&<BadgeCheck size={14} className="verifiedBadge"/>}</div><div className="forumFeedTime">{post.is_pinned&&<span className="forumPinned">PINNED</span>}<time>{new Date(post.created_at).toLocaleString()}</time></div></header><div className="forumFeedContent"><h3>{post.title}</h3><p>{post.body}</p></div>{(post.image_url||post.video_url)&&<div className="forumFeedMedia">{post.image_url&&<img src={post.image_url} alt={post.title}/>} {post.video_url&&<video src={post.video_url} controls preload="metadata"/>}</div>}<div className="forumFeedStats"><span><Heart size={12}/> {reactions} reactions</span><span><MessageCircle size={12}/> {post.reply_count||0} comments</span></div><div className="forumFeedActions"><Link className="forumCommentAction" href="/aevonsmp/forum"><MessageCircle size={15}/> Open Post & Comment</Link>{(forumViewerRole==='admin'||forumViewerId===post.user_id)&&<div className="forumThreadAdminActions">{forumViewerRole==='admin'&&<button type="button" className="secondaryBtn" onClick={()=>void adminPinPost(post)}>{post.is_pinned?<PinOff size={14}/>:<Pin size={14}/>} {post.is_pinned?'Unpin':'Pin'}</button>}<button type="button" className="dangerBtn" onClick={()=>void deleteCommunityPost(post)}><Trash2 size={14}/> Delete</button></div>}</div></article>})}{!communityPosts.length&&<div className="emptyCard"><MessagesSquare size={22}/><span>No community posts yet. Be the first one to share something.</span></div>}</div></section>
-  <section id="products" className="asmpProductsSection"><div className="sectionHeading"><div><p className="eyebrow">AEVONSMP PRODUCTS</p><h2>Server Store</h2><p className="muted smallMuted">Choose a product, quantity, and the Minecraft IGN that should receive it.</p></div></div><div className="asmpProductGrid">{products.map(p=><article className="asmpProductCard" key={p.id}>{p.image_url?<img src={p.image_url} alt={p.name}/>:<div className="asmpProductPlaceholder"><Package size={34}/></div>}<div className="asmpProductBody"><h3>{p.name}</h3><p>{p.description||'AevonSMP server product.'}</p><div className="asmpProductFooter"><strong>₱{Number(p.price).toFixed(2)}</strong><button className="primaryBtn" onClick={()=>{setSelected(p);setQty(1);setMessage('');setDiscountCode('');setDiscount(null);setDiscountMessage('')}}><ShoppingCart size={14}/> Order</button></div></div></article>)}</div>{!products.length&&<div className="emptyCard"><Package size={22}/><span>No AevonSMP products are published yet.</span></div>}</section>
-  {selected&&<div className="asmpModalBackdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setSelected(null)}}><div className="asmpCheckoutModal"><div className="sectionHeading"><div><p className="eyebrow">CHECKOUT</p><h2>{selected.name}</h2></div><button className="secondaryBtn" onClick={()=>setSelected(null)}>Close</button></div>{!loggedIn&&<div className="notice info"><LogIn size={16}/><span>You need to sign in before purchasing. <Link href="/login">Login here</Link>.</span></div>}<label>Minecraft IGN<input value={ign} onChange={e=>setIgn(e.target.value)} placeholder="Klioh_" maxLength={17}/><span className="fieldHint">The reward goes to this exact Minecraft player name. Bedrock dot-prefix names are accepted.</span></label><label>Quantity<input type="number" min="1" max={selected.max_quantity} value={qty} onChange={e=>setQty(Math.max(1,Math.min(selected.max_quantity,Number(e.target.value)||1)))}/></label><label>Discount Code <div className="discountInputRow"><input value={discountCode} onChange={e=>{setDiscountCode(e.target.value.toUpperCase());setDiscount(null);setDiscountMessage('')}} placeholder="AEVON10-XXXXXXXX"/><button type="button" className="secondaryBtn" disabled={discountBusy||!discountCode.trim()||!loggedIn} onClick={applyDiscount}>{discountBusy?<Loader2 size={14} className="spin"/>:<Percent size={14}/>} Apply</button></div>{discountMessage&&<span className={`fieldHint ${discount?.valid?'discountSuccess':'discountError'}`}>{discountMessage}</span>}</label><label>Payment Method<select value={method} onChange={e=>setMethod(e.target.value as any)}><option value="paypal">PayPal — automatic confirmation</option><option value="gcash">GCash — admin verification</option></select></label><div className="asmpPriceBreakdown"><div><span>Subtotal</span><b>₱{subtotal.toFixed(2)}</b></div>{discount?.valid&&<div className="discountLine"><span>{discount.verificationDiscountApplied?`Fully Verified Discount (${discount.discountPercent}%)`:`Discount (${discount.discountPercent}%)`}</span><b>-₱{discount.discountAmount.toFixed(2)}</b></div>}<div className="asmpCheckoutTotal"><span>Total</span><strong>₱{total.toFixed(2)}</strong></div></div>{message&&<div className="notice info"><CheckCircle2 size={16}/><span>{message}</span></div>}<button className="primaryBtn asmpCheckoutBtn" disabled={busy||!loggedIn||!ign.trim()} onClick={checkout}>{busy?<Loader2 size={15} className="spin"/>:<ShoppingCart size={15}/>} {busy?'Creating order…':method==='paypal'?'Continue to PayPal':'Create GCash Order'}</button></div></div>}
- </div>
+  async function validateImage(file: File) {
+    if (file.size > 5 * 1024 * 1024) throw new Error(`${file.name} is larger than 5 MB.`);
+    const url = URL.createObjectURL(file);
+    try {
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => { const i = new Image(); i.onload=()=>resolve(i); i.onerror=reject; i.src=url; });
+      if (img.naturalWidth < 500 || img.naturalHeight < 500) throw new Error(`${file.name} must be at least 500×500 pixels.`);
+    } finally { URL.revokeObjectURL(url); }
+  }
+
+  async function uploadMedia(pluginId: string, file: File) {
+    if (!supabase) throw new Error("Supabase is not configured.");
+    await validateImage(file);
+    const {data:s}=await supabase.auth.getSession(); const token=s.session?.access_token;
+    const prep=await fetch(`/api/admin/plugins/${pluginId}/media-upload-url`,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({fileName:file.name,fileSize:file.size,fileType:file.type})});
+    const pj=await prep.json(); if(!prep.ok) throw new Error(pj.error||"Could not prepare image upload.");
+    const up=await supabase.storage.from("plugin-media").uploadToSignedUrl(pj.path,pj.token,file,{contentType:file.type});
+    if(up.error) throw up.error;
+    return supabase.storage.from("plugin-media").getPublicUrl(pj.path).data.publicUrl;
+  }
+
+  async function uploadJarById(pluginId: string, pluginName: string, file: File, releaseVersion: string, kind: string, notes: string) {
+    if (!supabase) throw new Error("Supabase is not configured.");
+    if (!file.name.toLowerCase().endsWith(".jar")) throw new Error("Please select a .jar plugin file.");
+    const {data:s}=await supabase.auth.getSession(); const token=s.session?.access_token;
+    const prep=await fetch(`/api/admin/plugins/${pluginId}/upload-url`,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({fileName:file.name,fileSize:file.size,version:releaseVersion})});
+    const pj=await prep.json(); if(!prep.ok) throw new Error(pj.error||"Could not prepare JAR upload.");
+    const up=await supabase.storage.from("plugin-files").uploadToSignedUrl(pj.path,pj.token,file,{contentType:"application/java-archive"}); if(up.error) throw up.error;
+    const save=await fetch(`/api/admin/plugins/${pluginId}/file`,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({path:pj.path,fileName:file.name,fileSize:file.size,version:releaseVersion,releaseType:kind,changelog:notes})});
+    const sj=await save.json(); if(!save.ok) throw new Error(sj.error||`Could not save ${pluginName} JAR metadata.`);
+  }
+
+  async function submitPlugin(e: FormEvent) {
+    e.preventDefault();
+    if (!supabase || saving) return;
+    const normalizedSlug = makeSlug(slug || name);
+    if (!normalizedSlug) { setNotice({ type: "error", text: "Please enter a valid plugin name or slug." }); return; }
+    const existingImages = editingPlugin?.gallery_images ?? [];
+    const futureImageCount = [0,1,2].filter((i) => Boolean(galleryFiles[i] || existingImages[i])).length;
+    if (futureImageCount > 0 && futureImageCount < 3) { setNotice({type:"error",text:"Carousel pictures are optional, but if you use them you must provide all 3 images."}); return; }
+    if (status === "published" && !editingPlugin?.file_name && !jarFile) { setNotice({type:"error",text:"Published plugins require a JAR file."}); return; }
+    if (editingPlugin?.file_name && jarFile && version.trim() === (editingPlugin.version ?? "").trim()) { setNotice({type:"error",text:"A new JAR must use a new version number so the current release remains available in Version History."}); return; }
+    if (editingPlugin?.file_name && !jarFile && version.trim() !== (editingPlugin.version ?? "").trim()) { setNotice({type:"error",text:"Upload the new JAR when changing the plugin version. Version numbers are tied to releases."}); return; }
+    if (jarFile && editingPlugin?.file_name && !releaseNotes.trim()) { setNotice({type:"error",text:"Please add release notes/changelog for the new version."}); return; }
+    try {
+      for (const f of galleryFiles) if (f) await validateImage(f);
+      if (profileImageFile) await validateImage(profileImageFile);
+      setSaving(true); setNotice({ type: "info", text: editingId ? "Saving plugin content and uploads…" : "Creating plugin and uploading content…" });
+      const safeHtml = sanitizeRichHtml(descriptionHtml);
+      const plain = plainFromHtml(safeHtml) || description.trim();
+      const payload = { name:name.trim(), slug:normalizedSlug, description:plain.slice(0,1000), description_html:safeHtml.trim(), version:editingPlugin ? (editingPlugin.version ?? version.trim()) : version.trim(), price:Number(price)||0, status, wiki_url:wikiUrl.trim()||null, youtube_url:youtubeUrl.trim()||null, discord_url:discordUrl.trim()||null, paper_versions:paperVersions, purpur_versions:purpurVersions, updated_at:new Date().toISOString() };
+      let pluginId = editingId;
+      if (editingId) { const r=await supabase.from("plugins").update(payload).eq("id",editingId); if(r.error) throw r.error; }
+      else { const r=await supabase.from("plugins").insert(payload).select("id").single(); if(r.error) throw r.error; pluginId=r.data.id; }
+      if (!pluginId) throw new Error("Could not determine plugin ID.");
+      if (jarFile) await uploadJarById(pluginId, name.trim(), jarFile, version.trim(), releaseType, releaseNotes.trim() || (editingPlugin?.file_name ? "" : "Initial release."));
+      if (profileImageFile) {
+        const profileUrl = await uploadMedia(pluginId, profileImageFile);
+        const r = await supabase.from("plugins").update({profile_image_url:profileUrl,updated_at:new Date().toISOString()}).eq("id",pluginId);
+        if (r.error) throw r.error;
+      }
+      if (galleryFiles.some(Boolean)) {
+        const urls:string[]=[];
+        for (let i=0;i<3;i++) { const f=galleryFiles[i]; if(f) urls[i]=await uploadMedia(pluginId,f); else if(existingImages[i]) urls[i]=existingImages[i]; }
+        const r=await supabase.from("plugins").update({gallery_images:urls.filter(Boolean),updated_at:new Date().toISOString()}).eq("id",pluginId); if(r.error) throw r.error;
+      }
+      setNotice({type:"success",text:editingId?"Plugin listing updated successfully.":"Plugin created and uploaded successfully."});
+      resetForm(); await loadPlugins();
+    } catch (err:any) { const duplicate=err?.code==="23505"; setNotice({type:"error",text:duplicate?`A plugin with the slug “${normalizedSlug}” already exists.`:(err?.message||"Could not save plugin.")}); }
+    finally { setSaving(false); }
+  }
+
+  function beginEdit(plugin: PluginRow) {
+    setEditingId(plugin.id);
+    setName(plugin.name);
+    setSlug(plugin.slug);
+    setDescription(plugin.description ?? "");
+    setDescriptionHtml(plugin.description_html || plugin.description || "");
+    setVersion(plugin.version ?? "1.0.0");
+    setReleaseType("stable");
+    setReleaseNotes("");
+    setWikiUrl(plugin.wiki_url ?? ""); setYoutubeUrl(plugin.youtube_url ?? ""); setDiscordUrl(plugin.discord_url ?? "");
+    setJarFile(null); setGalleryFiles([null,null,null]); setProfileImageFile(null);
+    setPrice(String(plugin.price ?? 0));
+    setStatus(plugin.status === "published" ? "published" : "draft");
+    setPaperVersions(plugin.paper_versions ?? []);
+    setPurpurVersions(plugin.purpur_versions ?? []);
+    setNotice({ type: "info", text: `Editing ${plugin.name}.` });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function toggleStatus(plugin: PluginRow) {
+    if (!supabase) return;
+    const nextStatus = plugin.status === "published" ? "draft" : "published";
+    setNotice({
+      type: "info",
+      text: `${nextStatus === "published" ? "Publishing" : "Unpublishing"} ${plugin.name}…`,
+    });
+
+    const { error } = await supabase
+      .from("plugins")
+      .update({ status: nextStatus, updated_at: new Date().toISOString() })
+      .eq("id", plugin.id);
+
+    if (error) {
+      setNotice({ type: "error", text: error.message });
+      return;
+    }
+
+    const { error: releaseVisibilityError } = await supabase
+      .from("plugin_versions")
+      .update({ is_published: nextStatus === "published" })
+      .eq("plugin_id", plugin.id);
+    if (releaseVisibilityError) {
+      setNotice({ type: "error", text: `Plugin status changed, but version visibility could not be synchronized: ${releaseVisibilityError.message}` });
+      return;
+    }
+
+    setNotice({
+      type: "success",
+      text: `${plugin.name} is now ${nextStatus}.`,
+    });
+    await loadPlugins();
+  }
+
+  async function deletePlugin(plugin: PluginRow) {
+    if (!supabase) return;
+    const confirmed = window.confirm(
+      `Delete ${plugin.name}?\n\nThis removes the marketplace plugin record. This action cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    setNotice({ type: "info", text: `Deleting ${plugin.name}…` });
+    const { error } = await supabase.from("plugins").delete().eq("id", plugin.id);
+
+    if (error) {
+      setNotice({ type: "error", text: error.message });
+      return;
+    }
+
+    if (editingId === plugin.id) resetForm();
+    setNotice({ type: "success", text: `${plugin.name} was deleted.` });
+    await loadPlugins();
+  }
+
+
+  function prepareNewRelease(plugin: PluginRow) {
+    beginEdit(plugin);
+    setReleaseType("stable");
+    setReleaseNotes("");
+    setNotice({ type: "info", text: `Preparing a new release for ${plugin.name}. Enter a new version, changelog, and choose the new JAR.` });
+  }
+
+  async function reviewOrder(order: OrderRow, action: "approve" | "reject") {
+    if (!supabase || orderBusy) return;
+    if (action === "approve" && !window.confirm(`Approve ${order.order_code}?\n\nOnly approve after you have verified the GCash receipt in Discord.`)) return;
+    let note = "";
+    if (action === "reject") {
+      note = window.prompt("Optional rejection note:") || "";
+      if (!window.confirm(`Reject ${order.order_code}?`)) return;
+    }
+    setOrderBusy(order.id);
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token;
+    const res = await fetch(`/api/admin/orders/${order.id}/${action}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ note })
+    });
+    const body = await res.json();
+    setOrderBusy(null);
+    if (!res.ok) { setNotice({ type: "error", text: body.error || `Could not ${action} order.` }); return; }
+    setNotice({ type: "success", text: action === "approve" ? "Payment approved. Plugin ownership and license were granted." : "Order rejected." });
+    await loadOrders();
+  }
+
+  return (
+    <div className="pageWrap adminWrap">
+      <p className="eyebrow">ADMINISTRATION</p>
+      <h1>Admin Dashboard</h1>
+      <p className="muted">Create and manage marketplace listings using your secured admin role.</p>
+
+      {notice && (
+        <div className={`notice ${notice.type}`} role="status">
+          {notice.type === "success" ? (
+            <CheckCircle2 size={18} />
+          ) : notice.type === "error" ? (
+            <XCircle size={18} />
+          ) : (
+            <Loader2 size={18} className={checking || saving ? "spin" : ""} />
+          )}
+          <span>{notice.text}</span>
+        </div>
+      )}
+
+      {!allowed ? (
+        <div className="emptyCard">
+          <ShieldCheck size={24} />
+          <span>{checking ? "Checking admin access…" : "Admin access is required."}</span>
+        </div>
+      ) : (
+        <>
+          <div className="formCard">
+            <div className="sectionHeading">
+              <div>
+                <h3>{editingPlugin ? `Edit ${editingPlugin.name}` : "Add Plugin"}</h3>
+                <p className="muted smallMuted">
+                  {editingPlugin
+                    ? "Update the listing, then save your changes."
+                    : "Create a new marketplace listing. Slugs must be unique."}
+                </p>
+              </div>
+              {editingPlugin && (
+                <button className="secondaryBtn" type="button" onClick={resetForm}>
+                  Cancel edit
+                </button>
+              )}
+            </div>
+
+            <form onSubmit={submitPlugin} className="pluginEditorForm">
+              <div className="editorTwoCol">
+                <label>Plugin Name<input required value={name} onChange={(e)=>setName(e.target.value)} placeholder="ALicense" /></label>
+                <label>Plugin Version<input required value={version} onChange={(e)=>setVersion(e.target.value)} placeholder="1.1.1" /></label>
+              </div>
+              <div className="editorTwoCol">
+                <label>Slug<input value={slug} onChange={(e)=>setSlug(e.target.value)} placeholder={name?makeSlug(name):"alicense"}/></label>
+                <label>Price (PHP)<input type="number" min="0" step="0.01" value={price} onChange={(e)=>setPrice(e.target.value)}/></label>
+              </div>
+              <div className="compatibilityEditorBlock">
+                <div className="compatibilityEditorHeader">
+                  <strong>Server Compatibility</strong>
+                  <p>Choose every Minecraft version this plugin supports. Only Paper and Purpur are listed.</p>
+                </div>
+                <div className="editorTwoCol compatibilityGrid">
+                  <CompatibilityDropdown label="Paper Versions" value={paperVersions} onChange={setPaperVersions} />
+                  <CompatibilityDropdown label="Purpur Versions" value={purpurVersions} onChange={setPurpurVersions} />
+                </div>
+              </div>
+              <label>{editingPlugin ? "New Release JAR" : "Upload JAR File"} <span className="fieldHint">{editingPlugin?.file_name ? `Current latest: ${editingPlugin.file_name}` : "Required before publishing"}</span>
+                <input type="file" accept=".jar,application/java-archive" onChange={(e)=>setJarFile(e.target.files?.[0]??null)} />
+              </label>
+              <div className="editorTwoCol releaseEditorFields">
+                <label>Release Type<select value={releaseType} onChange={(e)=>setReleaseType(e.target.value as any)}><option value="stable">Stable</option><option value="hotfix">Hotfix</option><option value="beta">Beta</option><option value="legacy">Legacy</option></select></label>
+                <label>Release Notes / Changelog<textarea value={releaseNotes} onChange={(e)=>setReleaseNotes(e.target.value)} placeholder={editingPlugin ? "Example: Fixed license validation timeout and improved duplicate protection." : "Initial release notes (optional)."}/></label>
+              </div>
+              {editingPlugin && <p className="releaseEditorHint">Uploading a JAR creates a new permanent version-history entry. Use a new version number (for example, {editingPlugin.version || "1.0.0"} → 1.1.2). Old JARs stay available to existing owners.</p>}
+              <label>Full Plugin Description <span className="fieldHint">Emojis, bold, italic, underline, fonts, sizes, colors, and lists supported.</span></label>
+              <RichTextEditor value={descriptionHtml} onChange={setDescriptionHtml} />
+
+              <div className="profileImageEditorBlock">
+                <div><strong>Plugin Profile Picture</strong><p>Optional · shown on the marketplace card and beside the plugin title · max 5 MB · minimum 500×500 pixels.</p></div>
+                <label className="profileImageUploadSlot">
+                  {editingPlugin?.profile_image_url && !profileImageFile ? <img src={editingPlugin.profile_image_url} alt="Current plugin profile" /> : <div className="profileImagePlaceholder"><UploadCloud size={22}/></div>}
+                  <div><span>{profileImageFile ? "New profile picture selected" : editingPlugin?.profile_image_url ? "Current profile picture" : "Choose profile picture"}</span><small>{profileImageFile?.name || "PNG, JPG, WEBP, or GIF"}</small></div>
+                  <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(e)=>setProfileImageFile(e.target.files?.[0]??null)} />
+                </label>
+              </div>
+
+              <div className="galleryEditorBlock">
+                <div><strong>Carousel Pictures</strong><p>Optional · upload either all 3 pictures or none · each image max 5 MB · minimum 500×500 pixels.</p></div>
+                <div className="galleryUploadGrid">{[0,1,2].map((i)=><label className="galleryUploadSlot" key={i}><span>Picture {i+1}</span><input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(e)=>{const next=[...galleryFiles];next[i]=e.target.files?.[0]??null;setGalleryFiles(next)}}/><small>{galleryFiles[i]?.name || editingPlugin?.gallery_images?.[i]?.split('/').pop() || "Choose image"}</small></label>)}</div>
+              </div>
+
+              <div className="linkEditorBlock"><strong>Plugin Links</strong><p>Add up to 3 official links shown on the plugin information page.</p>
+                <div className="threeCol">
+                  <label>Wiki URL<input type="url" value={wikiUrl} onChange={(e)=>setWikiUrl(e.target.value)} placeholder="https://..."/></label>
+                  <label>YouTube Tutorial<input type="url" value={youtubeUrl} onChange={(e)=>setYoutubeUrl(e.target.value)} placeholder="https://youtube.com/..."/></label>
+                  <label>Discord Link<input type="url" value={discordUrl} onChange={(e)=>setDiscordUrl(e.target.value)} placeholder="https://discord.gg/..."/></label>
+                </div>
+              </div>
+              <label>Status<select value={status} onChange={(e)=>setStatus(e.target.value as "draft"|"published")}><option value="published">Published</option><option value="draft">Draft</option></select></label>
+              <button className="primaryBtn editorSaveBtn" type="submit" disabled={saving}>{saving?<Loader2 size={16} className="spin"/>:editingPlugin?<Edit3 size={16}/>:<Plus size={16}/>} {saving?"Saving & Uploading…":editingPlugin?"Save Plugin":"Create Plugin"}</button>
+            </form>
+          </div>
+
+          <section className="adminListSection">
+            <div className="sectionHeading">
+              <div>
+                <p className="eyebrow">MARKETPLACE LISTINGS</p>
+                <h2>Manage Plugins</h2>
+                <p className="muted smallMuted">
+                  {plugins.length} plugin{plugins.length === 1 ? "" : "s"} currently visible to this admin account.
+                </p>
+              </div>
+              <button className="secondaryBtn" type="button" onClick={loadPlugins} disabled={loadingPlugins}>
+                <RefreshCw size={16} className={loadingPlugins ? "spin" : ""} />
+                Refresh
+              </button>
+            </div>
+
+            {loadingPlugins && plugins.length === 0 ? (
+              <div className="emptyCard"><Loader2 size={22} className="spin" /><span>Loading plugins…</span></div>
+            ) : plugins.length === 0 ? (
+              <div className="emptyCard"><ShieldCheck size={22} /><span>No plugin listings found.</span></div>
+            ) : (
+              <div className="adminPluginList">
+                {plugins.map((plugin) => (
+                  <article className="adminPluginRow" key={plugin.id}>
+                    <div className="adminPluginMain">
+                      <div className="adminPluginTitleRow">
+                        <h3>{getPluginDisplayTitle(plugin.name, plugin.version)}</h3>
+                        <span className={`statusBadge ${plugin.status === "published" ? "published" : "draft"}`}>
+                          {plugin.status === "published" ? <Eye size={13} /> : <EyeOff size={13} />}
+                          {plugin.status}
+                        </span>
+                      </div>
+                      <p>{plugin.description || "No description."}</p>
+                      <div className="pluginMeta">
+                        <span>/{plugin.slug}</span>
+                        <span>v{plugin.version || "—"}</span>
+                        <span>{Number(plugin.price || 0) === 0 ? "Free" : `₱${Number(plugin.price).toFixed(2)}`}</span>
+                        <span>{plugin.file_name ? `File: ${plugin.file_name}` : "No JAR uploaded"}</span>
+                      </div>
+                    </div>
+                    <div className="adminPluginActions">
+                      <button className="secondaryBtn" type="button" onClick={() => prepareNewRelease(plugin)}>
+                        <UploadCloud size={15} /> {plugin.file_name ? "New Release" : "Upload JAR"}
+                      </button>
+                      <button className="secondaryBtn" type="button" onClick={() => beginEdit(plugin)}>
+                        <Edit3 size={15} /> Edit
+                      </button>
+                      <button className="secondaryBtn" type="button" onClick={() => toggleStatus(plugin)}>
+                        {plugin.status === "published" ? <EyeOff size={15} /> : <Eye size={15} />}
+                        {plugin.status === "published" ? "Unpublish" : "Publish"}
+                      </button>
+                      <button className="dangerBtn" type="button" onClick={() => deletePlugin(plugin)}>
+                        <Trash2 size={15} /> Delete
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <AdminAevonSMPStore />
+
+          <AdminForumCredits />
+
+          <AdminLicenseManager />
+
+          <section className="adminListSection paymentOrdersSection">
+            <div className="sectionHeading">
+              <div>
+                <h2>GCash Payment Verification</h2>
+                <p className="muted smallMuted">Verify the customer's receipt in Discord first. Approving here grants plugin ownership and creates the license automatically.</p>
+              </div>
+              <button className="secondaryBtn" type="button" onClick={loadOrders} disabled={loadingOrders}>
+                <RefreshCw size={14} className={loadingOrders ? "spin" : ""}/> Refresh Orders
+              </button>
+            </div>
+            {orders.length === 0 ? (
+              <div className="emptyCard">No GCash payment orders yet.</div>
+            ) : (
+              <div className="paymentOrderList">
+                {orders.map((order) => (
+                  <div className={`paymentOrderRow ${order.status}`} key={order.id}>
+                    <div className="paymentOrderMain">
+                      <div className="adminPluginTitleRow">
+                        <h3>{order.plugins?.name || "Plugin"}</h3>
+                        <span className={`orderStatus ${order.status}`}>{order.status}</span>
+                      </div>
+                      <code>{order.order_code}</code>
+                      <p>{order.customer_email}</p>
+                      <div className="pluginMeta">
+                        <span>GCash</span><span>₱{Number(order.amount).toLocaleString()}</span><span>{new Date(order.created_at).toLocaleString()}</span>
+                      </div>
+                    </div>
+                    <div className="adminPluginActions">
+                      {order.status === "pending" ? (<>
+                        <button className="secondaryBtn" disabled={orderBusy === order.id} onClick={() => reviewOrder(order, "reject")}>Reject</button>
+                        <button className="primaryBtn" disabled={orderBusy === order.id} onClick={() => reviewOrder(order, "approve")}>
+                          <CheckCircle2 size={14}/> {orderBusy === order.id ? "Working…" : "Approve & Grant"}
+                        </button>
+                      </>) : <span className="muted smallMuted">Reviewed</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </>
+      )}
+      {allowed && <AdminVerificationPanel />}
+    </div>
+  );
 }
