@@ -9,7 +9,7 @@ type ServerState={server_name:string;server_address:string;online:boolean;player
 type DiscountInfo={valid:boolean;discountCode:string|null;discountPercent:number;discountAmount:number;subtotal:number;amount:number;verificationDiscountApplied?:boolean;verificationDiscountPercent?:number;verificationPurchasesRemaining?:number;codeDiscountPercent?:number};
 
 type CommunityAuthor={nickname?:string|null;avatar_url?:string|null;verification_status?:string|null;role?:string|null}|null;
-type CommunityPost={id:string;title:string;body:string;created_at:string;is_pinned?:boolean;image_url?:string|null;video_url?:string|null;reply_count?:number;author:CommunityAuthor;reaction_counts?:Record<string,number>};
+type CommunityPost={id:string;user_id:string;title:string;body:string;created_at:string;is_pinned?:boolean;image_url?:string|null;video_url?:string|null;reply_count?:number;author:CommunityAuthor;reaction_counts?:Record<string,number>};
 
 export default function AevonSMPPage(){
  const [products,setProducts]=useState<Product[]>([]),[server,setServer]=useState<ServerState>(null),[selected,setSelected]=useState<Product|null>(null),[ign,setIgn]=useState(""),[qty,setQty]=useState(1),[method,setMethod]=useState<"paypal"|"gcash">("paypal"),[busy,setBusy]=useState(false),[message,setMessage]=useState(""),[loggedIn,setLoggedIn]=useState(false),[copied,setCopied]=useState(false),[discountCode,setDiscountCode]=useState(""),[discount,setDiscount]=useState<DiscountInfo|null>(null),[discountBusy,setDiscountBusy]=useState(false),[discountMessage,setDiscountMessage]=useState(""),[communityPosts,setCommunityPosts]=useState<CommunityPost[]>([]),[forumViewerRole,setForumViewerRole]=useState<string|null>(null),[forumViewerId,setForumViewerId]=useState<string|null>(null);
