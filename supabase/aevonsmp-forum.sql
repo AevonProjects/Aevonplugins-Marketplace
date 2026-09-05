@@ -292,3 +292,12 @@ end;
 $$;
 
 grant execute on function public.delete_aevonsmp_forum_thread(uuid,uuid,boolean) to service_role;
+
+-- ============================================================
+-- Forum media update: one image + one video per thread
+-- ============================================================
+alter table public.aevonsmp_forum_threads
+  add column if not exists image_url text,
+  add column if not exists image_path text,
+  add column if not exists video_url text,
+  add column if not exists video_path text;
