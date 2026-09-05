@@ -25,8 +25,27 @@ export async function GET(request:Request){
 export async function POST(request:Request){
   const auth=await requireUser(request); if('error' in auth)return NextResponse.json({error:auth.error},{status:auth.status});
   const b=await request.json(); const title=String(b.title||'').trim(),body=String(b.body||'').trim();
+  const imagePath=String(b.imagePath||'').trim()||null;
+  const videoPath=String(b.videoPath||'').trim()||null;
+  const ownedPrefix=`${auth.user.id}/`;
+  if(imagePath&&!imagePath.startsWith(ownedPrefix))return NextResponse.json({error:'Invalid forum image attachment.'},{status:400});
+  if(videoPath&&!videoPath.startsWith(ownedPrefix))return NextResponse.json({error:'Invalid forum video attachment.'},{status:400});
   const {data,error}=await auth.admin.rpc('create_aevonsmp_forum_thread',{p_user_id:auth.user.id,p_title:title,p_body:body});
   if(error){const msg=error.message||'Could not create thread.';if(msg.includes('NO_FORUM_CREDITS'))return NextResponse.json({error:'You have used your free forum post. Buy Forum Credits to create another thread.',needsCredits:true},{status:402});return NextResponse.json({error:msg},{status:400});}
+  let thread=data;
+  if(imagePath||videoPath){
+    const patch:any={};
+    if(imagePath){patch.image_path=imagePath;patch.image_url=auth.admin.storage.from('aevonsmp-forum-media').getPublicUrl(imagePath).data.publicUrl;}
+    if(videoPath){patch.video_path=videoPath;patch.video_url=auth.admin.storage.from('aevonsmp-forum-media').getPublicUrl(videoPath).data.publicUrl;}
+    const {data:updated,error:updateError}=await auth.admin.from('aevonsmp_forum_threads').update(patch).eq('id',data.id).eq('user_id',auth.user.id).select('*').single();
+    if(updateError){
+      await auth.admin.rpc('delete_aevonsmp_forum_thread',{p_actor_user_id:auth.user.id,p_thread_id:data.id,p_is_admin:false});
+      const paths=[imagePath,videoPath].filter(Boolean) as string[];
+      if(paths.length)await auth.admin.storage.from('aevonsmp-forum-media').remove(paths);
+      return NextResponse.json({error:'Could not attach the uploaded media to the thread. Run supabase/aevonsmp-forum-media-update.sql and try again.'},{status:500});
+    }
+    thread=updated;
+  }
   const {data:w}=await auth.admin.from('aevonsmp_forum_wallets').select('*').eq('user_id',auth.user.id).single();
-  return NextResponse.json({thread:data,wallet:w});
+  return NextResponse.json({thread,wallet:w});
 }
