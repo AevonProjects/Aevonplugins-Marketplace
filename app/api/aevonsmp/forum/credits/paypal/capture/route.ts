@@ -1,0 +1,10 @@
+import { NextResponse } from 'next/server';
+import { requireUser } from '@/lib/server/supabaseAdmin';
+import { paypalRequest } from '@/lib/server/paypal';
+export async function POST(request:Request){
+ const auth=await requireUser(request);if('error' in auth)return NextResponse.json({error:auth.error},{status:auth.status});const b=await request.json();const id=String(b.paypalOrderId||'');if(!id)return NextResponse.json({error:'PayPal order is required.'},{status:400});
+ const {data:o}=await auth.admin.from('aevonsmp_forum_credit_orders').select('*').eq('paypal_order_id',id).eq('payment_method','paypal').maybeSingle();if(!o||o.user_id!==auth.user.id)return NextResponse.json({error:'Credit order not found.'},{status:404});
+ if(o.payment_status==='paid'){const {data:bal}=await auth.admin.rpc('credit_aevonsmp_forum_order',{p_order_id:o.id});return NextResponse.json({ok:true,credits:o.credits,balance:bal,alreadyPaid:true});}
+ const pr=await paypalRequest(`/v2/checkout/orders/${encodeURIComponent(id)}/capture`,{method:'POST',headers:{'PayPal-Request-Id':`${o.order_code}-CAPTURE`}});const p=await pr.json();if(!pr.ok||p?.status!=='COMPLETED')return NextResponse.json({error:p?.message||'PayPal payment was not completed.'},{status:502});const cap=p?.purchase_units?.[0]?.payments?.captures?.[0];const paid=Number(cap?.amount?.value||0);if(Math.abs(paid-Number(o.amount))>.009)return NextResponse.json({error:'Captured amount does not match this credit order.'},{status:409});
+ const now=new Date().toISOString();const {error}=await auth.admin.from('aevonsmp_forum_credit_orders').update({payment_status:'paid',paypal_capture_id:cap?.id||null,paid_at:now,updated_at:now}).eq('id',o.id);if(error)return NextResponse.json({error:error.message},{status:500});const {data:balance,error:rpcError}=await auth.admin.rpc('credit_aevonsmp_forum_order',{p_order_id:o.id});if(rpcError)return NextResponse.json({error:rpcError.message},{status:500});return NextResponse.json({ok:true,credits:o.credits,balance});
+}

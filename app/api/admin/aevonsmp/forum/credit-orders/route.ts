@@ -1,0 +1,2 @@
+import {NextResponse} from 'next/server';import {requireAdmin} from '@/lib/server/supabaseAdmin';
+export async function GET(request:Request){const a=await requireAdmin(request);if('error'in a)return NextResponse.json({error:a.error},{status:a.status});const {data,error}=await a.admin.from('aevonsmp_forum_credit_orders').select('*').order('created_at',{ascending:false}).limit(100);return error?NextResponse.json({error:error.message},{status:500}):NextResponse.json({orders:data||[]});}

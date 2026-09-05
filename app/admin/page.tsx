@@ -20,6 +20,7 @@ import RichTextEditor from "@/components/RichTextEditor";
 import AdminVerificationPanel from "@/components/AdminVerificationPanel";
 import AdminLicenseManager from "@/components/AdminLicenseManager";
 import AdminAevonSMPStore from "@/components/AdminAevonSMPStore";
+import AdminForumCredits from "@/components/AdminForumCredits";
 
 type PluginRow = {
   id: string;
@@ -571,6 +572,8 @@ export default function AdminPage() {
           </section>
 
           <AdminAevonSMPStore />
+
+          <AdminForumCredits />
 
           <AdminLicenseManager />
 
