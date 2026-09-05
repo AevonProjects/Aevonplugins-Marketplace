@@ -333,6 +333,24 @@ export default function PluginDetailPage() {
   }
 
 
+  useEffect(() => {
+    let cancelled = false;
+    async function refreshVerifiedPricing() {
+      if (!showPayment || !plugin || !supabase || !signedIn) return;
+      const token = await authToken();
+      if (!token) return;
+      const res = await fetch('/api/orders/discount/validate', { method:'POST', headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`}, body:JSON.stringify({pluginId:plugin.id,discountCode:''}) });
+      const body = await res.json().catch(()=>({}));
+      if (cancelled || !res.ok) return;
+      if (body.verificationDiscountApplied) {
+        setDiscount(body);
+        setDiscountMessage(`Fully Verified benefit applied — 50% off this plugin.`);
+      }
+    }
+    void refreshVerifiedPricing();
+    return () => { cancelled = true; };
+  }, [showPayment, plugin?.id, signedIn]);
+
   async function applyDiscount() {
     if (!plugin || !supabase || !discountCode.trim()) return;
     setDiscountBusy(true); setDiscountMessage("");
@@ -341,7 +359,7 @@ export default function PluginDetailPage() {
     const res = await fetch('/api/orders/discount/validate', { method:'POST', headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`}, body:JSON.stringify({pluginId:plugin.id,discountCode:discountCode.trim()}) });
     const body = await res.json().catch(()=>({})); setDiscountBusy(false);
     if (!res.ok) { setDiscount(null); setDiscountMessage(body.error || 'Invalid discount code.'); return; }
-    setDiscount(body); setDiscountMessage(`${body.discountCode} applied — ${Number(body.discountPercent)}% off.`);
+    setDiscount(body); setDiscountMessage(body.verificationDiscountApplied&&Number(body.codeDiscountPercent||0)<50?`${body.discountCode} linked. Your Fully Verified 50% benefit gives the better price.`:`${body.discountCode} applied — ${Number(body.discountPercent)}% off.`);
   }
 
   async function createGcashOrder() {
@@ -639,7 +657,7 @@ export default function PluginDetailPage() {
               <label>Discount Code</label>
               <div className="discountInputRow"><input value={discountCode} onChange={(e)=>{setDiscountCode(e.target.value.toUpperCase());setDiscount(null);setDiscountMessage('')}} placeholder="AEVON10-XXXXXXXX"/><button type="button" className="secondaryBtn" disabled={discountBusy||!discountCode.trim()} onClick={applyDiscount}>{discountBusy?<LoaderCircle size={14} className="spin"/>:<Percent size={14}/>} Apply</button></div>
               {discountMessage && <span className={`fieldHint ${discount?.valid?'discountSuccess':'discountError'}`}>{discountMessage}</span>}
-              <div className="asmpPriceBreakdown"><div><span>Subtotal</span><b>₱{price.toFixed(2)}</b></div>{discount?.valid&&<div className="discountLine"><span>Discount ({discount.discountPercent}%)</span><b>-₱{Number(discount.discountAmount).toFixed(2)}</b></div>}<div className="asmpCheckoutTotal"><span>Total</span><strong>₱{Number(discount?.valid?discount.amount:price).toFixed(2)}</strong></div></div>
+              <div className="asmpPriceBreakdown"><div><span>Subtotal</span><b>₱{price.toFixed(2)}</b></div>{discount?.valid&&<div className="discountLine"><span>{discount.verificationDiscountApplied?`Fully Verified Discount (${discount.discountPercent}%)`:`Discount (${discount.discountPercent}%)`}</span><b>-₱{Number(discount.discountAmount).toFixed(2)}</b></div>}<div className="asmpCheckoutTotal"><span>Total</span><strong>₱{Number(discount?.valid?discount.amount:price).toFixed(2)}</strong></div></div>
             </div>}
 
             {!gcashOrder ? (

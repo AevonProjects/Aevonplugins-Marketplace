@@ -26,7 +26,7 @@ export async function POST(request: Request) {
   const baseAmount = Number(plugin.price || 0);
   if (baseAmount <= 0) return NextResponse.json({ error: "This plugin does not require payment." }, { status: 400 });
   let pricing;
-  try { pricing = await priceWithDiscount(auth.admin, auth.user, baseAmount, body.discountCode); }
+  try { pricing = await priceWithDiscount(auth.admin, auth.user, baseAmount, body.discountCode, { kind: 'marketplace', productId: plugin.id }); }
   catch (e) { return NextResponse.json({ error: e instanceof Error ? e.message : "Invalid discount code." }, { status: 400 }); }
 
   const { data: owned } = await auth.admin
@@ -48,7 +48,7 @@ export async function POST(request: Request) {
     .limit(1)
     .maybeSingle();
 
-  if (pending && String(pending.discount_code || "") === String(pricing.discountCode || "")) return NextResponse.json({ order: pending, existing: true });
+  if (pending && String(pending.discount_code || "") === String(pricing.discountCode || "") && Math.abs(Number(pending.amount)-Number(pricing.amount)) < 0.001) return NextResponse.json({ order: pending, existing: true });
 
   const email = auth.user.email || "unknown";
   const { data: order, error } = await auth.admin
@@ -68,6 +68,9 @@ export async function POST(request: Request) {
       discount_amount: pricing.discountAmount,
       commission_percent: pricing.commissionPercent,
       commission_amount: pricing.commissionAmount,
+      verification_discount_applied: pricing.verificationDiscountApplied,
+      verification_discount_percent: pricing.verificationDiscountPercent,
+      verification_discount_amount: pricing.verificationDiscountAmount,
       status: "pending"
     })
     .select("id,order_code,subtotal,amount,status,created_at,discount_code,discount_percent,discount_amount")

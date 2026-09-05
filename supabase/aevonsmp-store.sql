@@ -247,3 +247,21 @@ drop policy if exists "Users can view own marketplace commissions" on public.mar
 create policy "Users can view own marketplace commissions" on public.marketplace_discount_commissions for select to authenticated using (auth.uid() = owner_user_id);
 
 NOTIFY pgrst, 'reload schema';
+
+-- Fully Verified account purchase benefit
+-- Verified users receive 50% off their first 5 successful purchases of each product.
+-- AevonPlugins are normally purchased once per account, so a plugin purchase uses one eligible slot.
+alter table public.aevonsmp_orders add column if not exists verification_discount_applied boolean not null default false;
+alter table public.aevonsmp_orders add column if not exists verification_discount_percent numeric(5,2) not null default 0;
+alter table public.aevonsmp_orders add column if not exists verification_discount_amount numeric(10,2) not null default 0;
+
+alter table public.marketplace_orders add column if not exists verification_discount_applied boolean not null default false;
+alter table public.marketplace_orders add column if not exists verification_discount_percent numeric(5,2) not null default 0;
+alter table public.marketplace_orders add column if not exists verification_discount_amount numeric(10,2) not null default 0;
+
+create index if not exists aevonsmp_verified_benefit_lookup_idx
+  on public.aevonsmp_orders(user_id, product_id, verification_discount_applied, payment_status);
+create index if not exists marketplace_verified_benefit_lookup_idx
+  on public.marketplace_orders(user_id, plugin_id, verification_discount_applied, status);
+
+NOTIFY pgrst, 'reload schema';

@@ -10,7 +10,7 @@ export async function POST(request:Request){
   if(!p)return NextResponse.json({error:'Product is unavailable.'},{status:404});
   if(quantity>Number(p.max_quantity||64))return NextResponse.json({error:`Maximum quantity is ${p.max_quantity}.`},{status:400});
   try{
-    const d=await priceWithDiscount(auth.admin,auth.user,Number(p.price)*quantity,b.discountCode);
-    return NextResponse.json({valid:Boolean(d.discountCodeId),...d});
+    const d=await priceWithDiscount(auth.admin,auth.user,Number(p.price)*quantity,b.discountCode,{kind:'aevonsmp',productId:p.id});
+    return NextResponse.json({valid:d.discountPercent>0,...d});
   }catch(e:any){return NextResponse.json({error:e.message||'Invalid discount code.'},{status:400})}
 }
