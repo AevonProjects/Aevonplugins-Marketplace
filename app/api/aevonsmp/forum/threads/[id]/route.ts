@@ -28,6 +28,23 @@ export async function GET(request:Request,{params}:{params:Promise<{id:string}>}
  });
 }
 
+export async function PATCH(request:Request,{params}:{params:Promise<{id:string}>}){
+ const auth=await requireUser(request);if('error' in auth)return NextResponse.json({error:auth.error},{status:auth.status});
+ const {id}=await params;
+ const {data:profile}=await auth.admin.from('profiles').select('role').eq('id',auth.user.id).maybeSingle();
+ if(profile?.role!=='admin')return NextResponse.json({error:'Only administrators can pin or unpin forum posts.'},{status:403});
+ let body:any={};try{body=await request.json()}catch{}
+ if(typeof body.is_pinned!=='boolean')return NextResponse.json({error:'is_pinned must be true or false.'},{status:400});
+ if(body.is_pinned){
+   const {error:clearError}=await auth.admin.from('aevonsmp_forum_threads').update({is_pinned:false}).eq('is_pinned',true);
+   if(clearError)return NextResponse.json({error:clearError.message||'Could not clear the previous pinned post.'},{status:400});
+ }
+ const {data,error}=await auth.admin.from('aevonsmp_forum_threads').update({is_pinned:body.is_pinned,updated_at:new Date().toISOString()}).eq('id',id).neq('status','hidden').select('*').maybeSingle();
+ if(error)return NextResponse.json({error:error.message||'Could not update pinned state.'},{status:400});
+ if(!data)return NextResponse.json({error:'Post not found.'},{status:404});
+ return NextResponse.json({ok:true,thread:data});
+}
+
 export async function DELETE(request:Request,{params}:{params:Promise<{id:string}>}){
  const auth=await requireUser(request);if('error' in auth)return NextResponse.json({error:auth.error},{status:auth.status});
  const {id}=await params;
