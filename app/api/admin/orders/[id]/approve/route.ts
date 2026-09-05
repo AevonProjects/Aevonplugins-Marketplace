@@ -13,7 +13,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const { data: order } = await auth.admin
     .from("marketplace_orders")
-    .select("id,user_id,plugin_id,status,payment_method")
+    .select("id,user_id,plugin_id,status,payment_method,discount_code_id,commission_amount")
     .eq("id", id)
     .maybeSingle();
 
@@ -53,5 +53,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }).eq("id", id);
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
 
+  if (order.discount_code_id && Number(order.commission_amount || 0) > 0) {
+    await auth.admin.rpc("credit_marketplace_discount_commission", { p_order_id: order.id });
+  }
   return NextResponse.json({ ok: true });
 }

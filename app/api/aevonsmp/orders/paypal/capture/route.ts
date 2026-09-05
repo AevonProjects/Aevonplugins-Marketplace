@@ -7,10 +7,12 @@ export async function POST(request:Request){
  const b=await request.json(); const id=String(b.paypalOrderId||""); if(!id)return NextResponse.json({error:"PayPal order is required."},{status:400});
  const {data:o}=await auth.admin.from("aevonsmp_orders").select("*").eq("paypal_order_id",id).eq("payment_method","paypal").maybeSingle();
  if(!o||o.user_id!==auth.user.id)return NextResponse.json({error:"Order not found."},{status:404});
- if(o.payment_status==="paid")return NextResponse.json({ok:true,alreadyPaid:true,orderCode:o.order_code});
+ if(o.payment_status==="paid"){await auth.admin.rpc("credit_aevonsmp_discount_commission",{p_order_id:o.id});return NextResponse.json({ok:true,alreadyPaid:true,orderCode:o.order_code});}
  const pr=await paypalRequest(`/v2/checkout/orders/${encodeURIComponent(id)}/capture`,{method:"POST",headers:{"PayPal-Request-Id":`${o.order_code}-CAPTURE`}}); const p=await pr.json();
  if(!pr.ok||p?.status!=="COMPLETED")return NextResponse.json({error:p?.message||"PayPal payment was not completed."},{status:502});
  const cap=p?.purchase_units?.[0]?.payments?.captures?.[0]; const paid=Number(cap?.amount?.value||0); if(Math.abs(paid-Number(o.amount))>.009)return NextResponse.json({error:"Captured amount does not match this order."},{status:409});
  const now=new Date().toISOString(); const {error}=await auth.admin.from("aevonsmp_orders").update({payment_status:"paid",delivery_status:"payment_confirmed",paypal_capture_id:cap?.id||null,paid_at:now,updated_at:now}).eq("id",o.id);
- return error?NextResponse.json({error:error.message},{status:500}):NextResponse.json({ok:true,orderCode:o.order_code,minecraftIgn:o.minecraft_ign});
+ if(error)return NextResponse.json({error:error.message},{status:500});
+ await auth.admin.rpc("credit_aevonsmp_discount_commission",{p_order_id:o.id});
+ return NextResponse.json({ok:true,orderCode:o.order_code,minecraftIgn:o.minecraft_ign});
 }

@@ -17,7 +17,7 @@ export async function POST(request: Request) {
   if (!paypalOrderId) return NextResponse.json({ error: "PayPal order is required." }, { status: 400 });
 
   const { data: order } = await auth.admin.from("marketplace_orders")
-    .select("id,order_code,user_id,plugin_id,amount,currency,status,paypal_order_id,paypal_capture_id")
+    .select("id,order_code,user_id,plugin_id,amount,currency,status,paypal_order_id,paypal_capture_id,discount_code_id,commission_amount")
     .eq("paypal_order_id", paypalOrderId).eq("payment_method", "paypal").maybeSingle();
 
   if (!order || order.user_id !== auth.user.id) return NextResponse.json({ error: "PayPal order not found." }, { status: 404 });
@@ -63,6 +63,9 @@ export async function POST(request: Request) {
     }).eq("id", order.id).eq("status", "pending");
     if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
 
+    if (order.discount_code_id && Number(order.commission_amount || 0) > 0) {
+      await auth.admin.rpc("credit_marketplace_discount_commission", { p_order_id: order.id });
+    }
     return NextResponse.json({ ok: true, pluginId: order.plugin_id });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "PayPal capture failed." }, { status: 500 });

@@ -2,6 +2,7 @@ import { randomBytes } from "crypto";
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/server/supabaseAdmin";
 import { paypalRequest } from "@/lib/server/paypal";
+import { priceWithDiscount } from "@/lib/server/aevonDiscount";
 
 function orderCode() {
   return `AEVN-PAYPAL-${Date.now().toString(36).toUpperCase()}-${randomBytes(3).toString("hex").toUpperCase()}`;
@@ -11,22 +12,26 @@ export async function POST(request: Request) {
   const auth = await requireUser(request);
   if ("error" in auth) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
-  let body: { pluginId?: string };
+  let body: { pluginId?: string; discountCode?: string };
   try { body = await request.json(); } catch { return NextResponse.json({ error: "Invalid request." }, { status: 400 }); }
   const pluginId = String(body.pluginId || "");
   if (!pluginId) return NextResponse.json({ error: "Plugin is required." }, { status: 400 });
 
   const { data: plugin } = await auth.admin.from("plugins").select("id,name,slug,price,status").eq("id", pluginId).maybeSingle();
   if (!plugin || plugin.status !== "published") return NextResponse.json({ error: "Plugin is unavailable." }, { status: 404 });
-  const amount = Number(plugin.price || 0);
-  if (!Number.isFinite(amount) || amount <= 0) return NextResponse.json({ error: "This plugin does not require payment." }, { status: 400 });
+  const baseAmount = Number(plugin.price || 0);
+  if (!Number.isFinite(baseAmount) || baseAmount <= 0) return NextResponse.json({ error: "This plugin does not require payment." }, { status: 400 });
+  let pricing;
+  try { pricing = await priceWithDiscount(auth.admin, auth.user, baseAmount, body.discountCode); }
+  catch (e) { return NextResponse.json({ error: e instanceof Error ? e.message : "Invalid discount code." }, { status: 400 }); }
+  if (pricing.amount <= 0) return NextResponse.json({ error: "This discount results in a free order, which is not available through PayPal checkout." }, { status: 400 });
 
   const { data: owned } = await auth.admin.from("user_plugins").select("id").eq("user_id", auth.user.id).eq("plugin_id", pluginId).maybeSingle();
   if (owned) return NextResponse.json({ error: "You already own this plugin." }, { status: 409 });
 
   const origin = new URL(request.url).origin;
   const localOrderCode = orderCode();
-  const value = amount.toFixed(2);
+  const value = pricing.amount.toFixed(2);
 
   try {
     const paypalResponse = await paypalRequest("/v2/checkout/orders", {
@@ -65,14 +70,21 @@ export async function POST(request: Request) {
       plugin_id: plugin.id,
       customer_email: auth.user.email || "unknown",
       payment_method: "paypal",
-      amount,
+      subtotal: pricing.subtotal,
+      amount: pricing.amount,
       currency: "PHP",
+      discount_code_id: pricing.discountCodeId,
+      discount_code: pricing.discountCode,
+      discount_percent: pricing.discountPercent,
+      discount_amount: pricing.discountAmount,
+      commission_percent: pricing.commissionPercent,
+      commission_amount: pricing.commissionAmount,
       status: "pending",
       paypal_order_id: paypal.id
     });
     if (error) return NextResponse.json({ error: `Could not save PayPal order: ${error.message}` }, { status: 500 });
 
-    return NextResponse.json({ approveUrl, paypalOrderId: paypal.id, orderCode: localOrderCode });
+    return NextResponse.json({ approveUrl, paypalOrderId: paypal.id, orderCode: localOrderCode, subtotal: pricing.subtotal, amount: pricing.amount, discountCode: pricing.discountCode, discountPercent: pricing.discountPercent, discountAmount: pricing.discountAmount });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "PayPal checkout failed." }, { status: 500 });
   }
