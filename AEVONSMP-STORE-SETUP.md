@@ -80,3 +80,18 @@ The bridge heartbeat is considered stale after roughly 30 seconds, so the websit
 - `/asmpbridge` — show bridge status
 - `/asmpbridge reload` — reload config and 5-second interval
 Permission: `aevonsmpbridge.admin` (default OP)
+
+## Discount Codes & Commissions
+
+The AevonSMP store now includes account-bound affiliate discount codes.
+
+1. Re-run `supabase/aevonsmp-store.sql` in the Supabase SQL Editor. The script uses `IF NOT EXISTS` / additive migrations and adds the discount-code tables and order fields.
+2. In **Admin → AevonSMP Store**, enter the registered user's email, a percentage discount, and a commission percentage (default: 5%).
+3. The website generates one unique code for that account. The user can open **My Account → Discount Code** to view/copy it and see unique players, paid uses, balance, and lifetime commission.
+4. Customers enter a code during AevonSMP checkout. The server recalculates the discount; client-provided prices are never trusted.
+5. Commission is credited only after PayPal capture succeeds or a GCash order is approved. A unique ledger row per order prevents double-crediting.
+6. Code owners cannot use their own code for self-referral commission.
+
+Commission is calculated from the **final amount actually paid after the discount**. Example: a ₱1,000 order with a 10% discount becomes ₱900. At a 5% commission rate, the code owner earns ₱45.
+
+The commission balance is currently an internal tracked balance. No automatic withdrawal/payout endpoint is enabled yet.
