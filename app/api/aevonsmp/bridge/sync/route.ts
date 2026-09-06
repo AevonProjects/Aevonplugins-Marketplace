@@ -8,9 +8,27 @@ type Ack = { orderId?: string; status?: string; message?: string };
 type Player = { name?: string; uuid?: string };
 
 export async function POST(request: Request) {
-  const expected = process.env.AEVONSMP_BRIDGE_SECRET;
-  const got = request.headers.get("x-aevonsmp-secret");
-  if (!expected || !got || got !== expected) return NextResponse.json({ error: "Unauthorized bridge." }, { status: 401 });
+  const expected = (process.env.AEVONSMP_BRIDGE_SECRET || "").trim();
+  const got = (request.headers.get("x-aevonsmp-secret") || "").trim();
+
+  if (!expected) {
+    return NextResponse.json(
+      { error: "Bridge secret is not configured on the website deployment.", code: "BRIDGE_SECRET_NOT_CONFIGURED" },
+      { status: 503 }
+    );
+  }
+  if (!got) {
+    return NextResponse.json(
+      { error: "Bridge secret header is missing.", code: "BRIDGE_SECRET_MISSING" },
+      { status: 401 }
+    );
+  }
+  if (got !== expected) {
+    return NextResponse.json(
+      { error: "Bridge secret does not match the website secret.", code: "BRIDGE_SECRET_MISMATCH" },
+      { status: 401 }
+    );
+  }
 
   let body: { serverId?: string; serverName?: string; serverAddress?: string; playersMax?: number; minecraftVersion?: string; pluginVersion?: string; players?: Player[]; acknowledgements?: Ack[] };
   try { body = await request.json(); } catch { return NextResponse.json({ error: "Invalid JSON." }, { status: 400 }); }

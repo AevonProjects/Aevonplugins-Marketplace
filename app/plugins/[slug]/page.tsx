@@ -375,6 +375,10 @@ export default function PluginDetailPage() {
     const body = await res.json();
     setPaymentBusy(false);
     if (!res.ok) { setActionMessage(body.error || 'Could not create GCash order.'); return; }
+    if (body.ticketId) {
+      window.location.assign(`/account/tickets/${body.ticketId}`);
+      return;
+    }
     setGcashOrder(body.order);
   }
 
@@ -699,14 +703,14 @@ export default function PluginDetailPage() {
                   <Clock3 size={19} />
                   <div>
                     <strong>Payment verification required</strong>
-                    <p>After completing your GCash payment, take a clear screenshot of your payment receipt and join our Discord server. Create a support ticket and submit the receipt together with your order reference. Once your payment has been verified, you will receive a notification and the plugin will become available in <b>My Library</b>.</p>
+                    <p>After choosing GCash, the website creates a private payment ticket automatically. Use that ticket to communicate with an admin and provide your GCash payment reference. Once verified, the plugin becomes available in <b>My Library</b>.</p>
                     <p><b>Please allow up to 24 hours for GCash payment verification.</b></p>
                   </div>
                 </div>
 
                 <div className="paymentActionRow">
                   <button className="secondaryBtn" onClick={copyOrderCode}><Copy size={15}/> Copy Order Reference</button>
-                  <a className="primaryBtn" href={paymentConfig.discordInvite} target="_blank" rel="noreferrer">Join Discord & Create Ticket <ExternalLink size={15}/></a>
+                  <a className="primaryBtn" href={paymentConfig.discordInvite} target="_blank" rel="noreferrer">Open Website Payment Ticket <ExternalLink size={15}/></a>
                 </div>
               </div>
             )}

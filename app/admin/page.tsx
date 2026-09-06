@@ -21,6 +21,7 @@ import AdminVerificationPanel from "@/components/AdminVerificationPanel";
 import AdminLicenseManager from "@/components/AdminLicenseManager";
 import AdminAevonSMPStore from "@/components/AdminAevonSMPStore";
 import AdminForumCredits from "@/components/AdminForumCredits";
+import AdminGcashTickets from "@/components/AdminGcashTickets";
 
 type PluginRow = {
   id: string;
@@ -176,6 +177,7 @@ export default function AdminPage() {
       .from("marketplace_orders")
       .select("id,order_code,customer_email,amount,currency,payment_method,status,created_at,plugin_id,plugins(name)")
       .eq("payment_method", "gcash")
+      .eq("admin_hidden", false)
       .order("created_at", { ascending: false })
       .limit(100);
     setLoadingOrders(false);
@@ -391,7 +393,7 @@ export default function AdminPage() {
 
   async function reviewOrder(order: OrderRow, action: "approve" | "reject") {
     if (!supabase || orderBusy) return;
-    if (action === "approve" && !window.confirm(`Approve ${order.order_code}?\n\nOnly approve after you have verified the GCash receipt in Discord.`)) return;
+    if (action === "approve" && !window.confirm(`Approve ${order.order_code}?\n\nOnly approve after you have verified the GCash payment in the website ticket.`)) return;
     let note = "";
     if (action === "reject") {
       note = window.prompt("Optional rejection note:") || "";
@@ -409,6 +411,19 @@ export default function AdminPage() {
     setOrderBusy(null);
     if (!res.ok) { setNotice({ type: "error", text: body.error || `Could not ${action} order.` }); return; }
     setNotice({ type: "success", text: action === "approve" ? "Payment approved. Plugin ownership and license were granted." : "Order rejected." });
+    await loadOrders();
+  }
+
+  async function hideOrderHistory(order: OrderRow) {
+    if (!supabase || orderBusy) return;
+    if (!window.confirm(`Remove ${order.order_code} from the admin purchase history?\n\nThis only hides the reviewed history entry. It does not revoke plugin ownership, licenses, commissions, or completed fulfillment.`)) return;
+    setOrderBusy(order.id);
+    const token = (await supabase.auth.getSession()).data.session?.access_token || "";
+    const res = await fetch(`/api/admin/orders/${order.id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+    const body = await res.json().catch(() => ({}));
+    setOrderBusy(null);
+    if (!res.ok) { setNotice({ type: "error", text: body.error || "Could not remove order from history." }); return; }
+    setNotice({ type: "success", text: "Order removed from admin purchase history." });
     await loadOrders();
   }
 
@@ -577,11 +592,13 @@ export default function AdminPage() {
 
           <AdminLicenseManager />
 
+          <AdminGcashTickets />
+
           <section className="adminListSection paymentOrdersSection">
             <div className="sectionHeading">
               <div>
                 <h2>GCash Payment Verification</h2>
-                <p className="muted smallMuted">Verify the customer's receipt in Discord first. Approving here grants plugin ownership and creates the license automatically.</p>
+                <p className="muted smallMuted">Open the buyer's private GCash ticket to verify payment. Approving grants plugin ownership and creates the license automatically.</p>
               </div>
               <button className="secondaryBtn" type="button" onClick={loadOrders} disabled={loadingOrders}>
                 <RefreshCw size={14} className={loadingOrders ? "spin" : ""}/> Refresh Orders
@@ -610,7 +627,7 @@ export default function AdminPage() {
                         <button className="primaryBtn" disabled={orderBusy === order.id} onClick={() => reviewOrder(order, "approve")}>
                           <CheckCircle2 size={14}/> {orderBusy === order.id ? "Working…" : "Approve & Grant"}
                         </button>
-                      </>) : <span className="muted smallMuted">Reviewed</span>}
+                      </>) : <button className="dangerBtn" disabled={orderBusy === order.id} onClick={() => hideOrderHistory(order)}>Delete History</button>}
                     </div>
                   </div>
                 ))}

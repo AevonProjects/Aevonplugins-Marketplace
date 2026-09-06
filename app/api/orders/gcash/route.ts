@@ -2,6 +2,7 @@ import { randomBytes } from "crypto";
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/server/supabaseAdmin";
 import { priceWithDiscount } from "@/lib/server/aevonDiscount";
+import { ensureGcashTicket } from "@/lib/server/gcashTickets";
 
 function orderCode() {
   return `AEVN-GCASH-${Date.now().toString(36).toUpperCase()}-${randomBytes(3).toString("hex").toUpperCase()}`;
@@ -48,7 +49,14 @@ export async function POST(request: Request) {
     .limit(1)
     .maybeSingle();
 
-  if (pending && String(pending.discount_code || "") === String(pricing.discountCode || "") && Math.abs(Number(pending.amount)-Number(pricing.amount)) < 0.001) return NextResponse.json({ order: pending, existing: true });
+  if (pending && String(pending.discount_code || "") === String(pricing.discountCode || "") && Math.abs(Number(pending.amount)-Number(pricing.amount)) < 0.001) {
+    const ticketId = await ensureGcashTicket(auth.admin, {
+      orderKind: "marketplace", orderId: pending.id, orderCode: pending.order_code,
+      userId: auth.user.id, customerEmail: auth.user.email || "unknown",
+      productName: plugin.name, amount: Number(pending.amount)
+    });
+    return NextResponse.json({ order: pending, existing: true, ticketId });
+  }
 
   const email = auth.user.email || "unknown";
   const { data: order, error } = await auth.admin
@@ -77,5 +85,13 @@ export async function POST(request: Request) {
     .single();
 
   if (error || !order) return NextResponse.json({ error: error?.message || "Could not create GCash order." }, { status: 500 });
-  return NextResponse.json({ order, existing: false });
+  try {
+    const ticketId = await ensureGcashTicket(auth.admin, {
+      orderKind: "marketplace", orderId: order.id, orderCode: order.order_code,
+      userId: auth.user.id, customerEmail: email, productName: plugin.name, amount: Number(order.amount)
+    });
+    return NextResponse.json({ order, existing: false, ticketId });
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : "Order created but ticket creation failed." }, { status: 500 });
+  }
 }

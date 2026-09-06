@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/server/supabaseAdmin";
+import { syncTicketStatus } from "@/lib/server/gcashTickets";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireAdmin(request);
@@ -21,5 +22,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     updated_at: now
   }).eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  await syncTicketStatus(auth.admin, "marketplace", id, "rejected");
   return NextResponse.json({ ok: true });
 }

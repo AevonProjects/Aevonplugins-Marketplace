@@ -292,3 +292,27 @@ html{scroll-behavior:smooth}body{background:#030b13}.shell{display:block;min-hei
 /* AevonSMP social-style community feed */
 .forumFeed{display:grid;gap:18px;max-width:760px;margin:0 auto}.forumFeedPost{overflow:hidden;border:1px solid #173d56;background:linear-gradient(180deg,#071924,#05131d);border-radius:18px;box-shadow:0 16px 34px rgba(0,0,0,.16)}.forumFeedHeader{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:15px 16px 11px}.forumFeedHeader .forumAuthor>img,.forumFeedHeader .forumAvatarFallback{width:42px;height:42px;border-radius:50%}.forumFeedHeader .forumAuthor b{font-size:11px}.forumFeedHeader .forumAuthor small{font-size:7px}.forumFeedTime{display:grid;justify-items:end;gap:4px;color:#607f92;font-size:8px}.forumFeedContent{padding:0 16px 13px}.forumFeedContent h3{font-size:15px;margin:4px 0 8px;color:#e9f8ff}.forumFeedContent>p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;color:#b2cad8;font-size:11px;line-height:1.7}.forumFeedMedia{width:100%;background:#02090e;border-top:1px solid #133447;border-bottom:1px solid #133447}.forumFeedMedia img,.forumFeedMedia video{display:block;width:100%;max-height:650px;object-fit:contain;background:#02090e}.forumFeedMedia video{max-height:600px}.forumFeedStats{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 16px 7px;color:#6e8da0;font-size:8px}.forumFeedStats button{border:0;background:transparent;color:#7da8c1;font-size:8px;cursor:pointer}.forumFeedActions{display:flex;align-items:center;justify-content:space-between;gap:10px;border-top:1px solid #143447;padding:7px 12px 10px}.forumFeedActions .forumReactionBar{margin-top:0}.forumCommentAction{display:inline-flex;align-items:center;gap:6px;border:0;background:transparent;color:#8fc8e7;font-size:9px;font-weight:800;cursor:pointer;padding:7px 9px}.forumCommentAction:hover{color:#cdeeff}.asmpCommunityFeed{margin-top:34px}.asmpCommunityFeed .forumFeed{max-width:800px}.asmpCommunityFeedHeadActions{display:flex;gap:8px;flex-wrap:wrap}
 @media(max-width:560px){.forumFeed{gap:13px}.forumFeedPost{border-radius:14px}.forumFeedHeader{padding:13px 13px 9px}.forumFeedContent{padding:0 13px 11px}.forumFeedActions{align-items:flex-start;flex-direction:column}.forumCommentAction{width:100%;justify-content:center;border-top:1px solid #123044;padding-top:10px}.forumFeedMedia img,.forumFeedMedia video{max-height:500px}}
+
+
+/* Aevon GCash private payment tickets */
+.gcashTicketsPage,.gcashTicketDetail{max-width:1180px;margin:0 auto}
+.gcashTicketList{display:grid;gap:14px}
+.gcashTicketCard{display:flex;justify-content:space-between;gap:18px;align-items:center;padding:18px;border:1px solid var(--border);border-radius:18px;background:var(--panel);text-decoration:none;color:inherit;transition:.18s ease}
+.gcashTicketCard:hover{transform:translateY(-1px);border-color:var(--accent)}
+.gcashTicketCard h3{margin:8px 0 5px}.gcashTicketCard p{margin:7px 0 0;color:var(--muted)}
+.ticketOpen{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}.ticketOpen small{width:100%;text-align:right;color:var(--muted)}
+.ticketStatus{display:inline-flex;align-items:center;width:max-content;padding:4px 9px;border-radius:999px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;background:rgba(148,163,184,.16)}
+.ticketStatus.open{background:rgba(59,130,246,.15)}.ticketStatus.approved{background:rgba(34,197,94,.16)}.ticketStatus.rejected{background:rgba(239,68,68,.16)}.ticketStatus.closed{background:rgba(148,163,184,.16)}
+.gcashTicketHeader{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;padding:22px;margin:14px 0 18px;border:1px solid var(--border);border-radius:20px;background:var(--panel)}
+.gcashTicketHeader h1{margin:5px 0 8px}.ticketAmount{display:flex;flex-direction:column;gap:6px;align-items:flex-end}.ticketAmount strong{font-size:30px}
+.gcashTicketColumns{display:grid;grid-template-columns:minmax(280px,.78fr) minmax(0,1.22fr);gap:18px}
+.gcashPaymentPanel{text-align:center}.ticketQr{display:block;width:min(100%,330px);aspect-ratio:1/1;object-fit:contain;margin:14px auto;border-radius:18px;background:#fff;padding:10px}
+.ticketAdminReview{display:flex;gap:10px;justify-content:center;margin-top:15px}
+.gcashConversation{display:flex;flex-direction:column;min-height:620px}.ticketMessages{flex:1;display:flex;flex-direction:column;gap:10px;max-height:560px;overflow:auto;padding:5px}
+.ticketNoMessages{padding:30px 16px;text-align:center;color:var(--muted)}
+.ticketMessage{max-width:82%;padding:11px 13px;border-radius:15px;background:var(--surface-2,rgba(148,163,184,.11));border:1px solid var(--border)}
+.ticketMessage.mine{align-self:flex-end}.ticketMessage.admin{border-color:rgba(59,130,246,.25)}
+.ticketMessageMeta{display:flex;justify-content:space-between;gap:14px;font-size:11px;color:var(--muted);margin-bottom:5px}.ticketMessage p{white-space:pre-wrap;margin:0}
+.ticketComposer{display:grid;grid-template-columns:1fr auto;gap:10px;margin-top:12px}.ticketComposer textarea{min-height:80px;resize:vertical}
+.gcashAccountTickets{margin-top:18px}
+@media(max-width:800px){.gcashTicketColumns{grid-template-columns:1fr}.gcashTicketHeader,.gcashTicketCard{flex-direction:column}.ticketAmount{align-items:flex-start}.ticketOpen{justify-content:flex-start}.ticketOpen small{text-align:left}.ticketMessage{max-width:94%}.ticketComposer{grid-template-columns:1fr}}

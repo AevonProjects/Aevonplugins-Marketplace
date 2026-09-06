@@ -1,6 +1,6 @@
 "use client";
 import {useEffect,useState} from 'react';
-import {BadgeCheck,Camera,Copy,KeyRound,Mail,Package,Percent,ShieldCheck,UploadCloud,UserRound,Wallet} from 'lucide-react';
+import {BadgeCheck,Camera,Copy,KeyRound,Mail,MessageSquareText,Package,Percent,ShieldCheck,UploadCloud,UserRound,Wallet} from 'lucide-react';
 import {supabase} from '@/lib/supabase';
 
 export default function AccountPage(){
@@ -20,6 +20,10 @@ export default function AccountPage(){
   <div className="accountHero"><div className="accountAvatar">{p?.avatar_url?<img src={p.avatar_url}/>:<UserRound/>}<label><Camera size={14}/><input hidden type="file" accept="image/*" onChange={e=>e.target.files?.[0]&&avatar(e.target.files[0])}/></label></div><div><span>AEVON MEMBER</span><h1>{p?.nickname||'My Account'} {p?.verification_status==='verified'&&<BadgeCheck className="verifiedBadge"/>}</h1><p>{p?.verification_status==='verified'?'Fully Verified Account':'Manage your profile, security, purchases, and verification.'}</p></div></div>{msg&&<div className="accountNotice">{msg}</div>}
   <div className="accountGrid"><section className="accountPanel"><h2><UserRound/> Profile & Nickname</h2><label>Public nickname<input value={nick} onChange={e=>setNick(e.target.value)} maxLength={32}/></label><p className="fieldHelp">Only your nickname is shown publicly. It can be changed once every 30 days.</p><button className="primaryBtn" onClick={saveNick}>Update Nickname</button><label className="avatarUpload">Profile picture<input type="file" accept="image/*" onChange={e=>e.target.files?.[0]&&avatar(e.target.files[0])}/></label></section>
   <section className="accountPanel"><h2><KeyRound/> Login & Security</h2><label><Mail size={13}/> Email<input type="email" value={email} onChange={e=>setEmail(e.target.value)}/></label><button className="secondaryBtn" onClick={updateEmail}>Update Email</button><label>Current password<input type="password" value={currentPass} onChange={e=>setCurrentPass(e.target.value)} placeholder="Current password"/></label><label>New password<input type="password" value={pass} onChange={e=>setPass(e.target.value)} placeholder="At least 8 characters"/></label><button className="secondaryBtn" onClick={updatePass}>Change Password</button><p className="fieldHelp">Sensitive account changes use your authenticated Supabase session. Email changes require confirmation.</p></section></div>
+
+  <section className="accountPanel gcashAccountTickets">
+   <div className="sectionHeading"><div><h2><MessageSquareText/> GCash Payment Tickets</h2><p className="fieldHelp">Private payment conversations between you and Aevon administrators. Tickets are created automatically when you choose GCash.</p></div><a className="primaryBtn" href="/account/tickets">View My Tickets</a></div>
+  </section>
 
   <section id="discount-code" className={`accountPanel discountAccountPanel ${discountOpen?'open':''}`}>
    <button className="discountAccountToggle" onClick={()=>setDiscountOpen(v=>!v)}><div><Percent/><span><b>Discount Code</b><small>{discount?.code?`${Number(discount.code.discount_percent)}% customer discount · ${Number(discount.code.commission_percent)}% commission`:'No discount code has been assigned to this account.'}</small></span></div><strong>{discountOpen?'HIDE':'VIEW'}</strong></button>

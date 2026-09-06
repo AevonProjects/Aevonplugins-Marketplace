@@ -1,6 +1,7 @@
 import { randomBytes } from "crypto";
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/server/supabaseAdmin";
+import { syncTicketStatus } from "@/lib/server/gcashTickets";
 
 function licenseKey() {
   return `AEVN-${randomBytes(5).toString("hex").toUpperCase()}-${randomBytes(5).toString("hex").toUpperCase()}`;
@@ -56,5 +57,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (order.discount_code_id && Number(order.commission_amount || 0) > 0) {
     await auth.admin.rpc("credit_marketplace_discount_commission", { p_order_id: order.id });
   }
+  await syncTicketStatus(auth.admin, "marketplace", id, "approved");
   return NextResponse.json({ ok: true });
 }
