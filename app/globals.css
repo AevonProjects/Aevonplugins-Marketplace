@@ -316,3 +316,16 @@ html{scroll-behavior:smooth}body{background:#030b13}.shell{display:block;min-hei
 .ticketComposer{display:grid;grid-template-columns:1fr auto;gap:10px;margin-top:12px}.ticketComposer textarea{min-height:80px;resize:vertical}
 .gcashAccountTickets{margin-top:18px}
 @media(max-width:800px){.gcashTicketColumns{grid-template-columns:1fr}.gcashTicketHeader,.gcashTicketCard{flex-direction:column}.ticketAmount{align-items:flex-start}.ticketOpen{justify-content:flex-start}.ticketOpen small{text-align:left}.ticketMessage{max-width:94%}.ticketComposer{grid-template-columns:1fr}}
+
+.ticketChatImage{display:block;max-width:min(100%,460px);max-height:440px;object-fit:contain;border-radius:12px;margin-top:8px;border:1px solid var(--border);background:rgba(0,0,0,.1)}
+.ticketComposerActions{display:flex;gap:8px;align-items:stretch;flex-direction:column}
+.ticketImagePicker{cursor:pointer;justify-content:center;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ticketAttachmentPreview{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-top:8px;padding:9px 11px;border:1px dashed var(--border);border-radius:12px;color:var(--muted)}
+.ticketCancelPurchase,.ticketPermanentDelete{margin-top:14px}
+.ticketStatus.cancelled{background:rgba(148,163,184,.18)}
+@media(max-width:800px){.ticketComposerActions{flex-direction:row;flex-wrap:wrap}.ticketAttachmentPreview{align-items:flex-start;flex-direction:column}}
+
+.multiCommandEditor{display:grid;gap:10px;padding:14px;border:1px solid var(--border);border-radius:14px;background:rgba(148,163,184,.04)}
+.commandEditorTitle{font-weight:700}.commandRow{display:grid;grid-template-columns:32px minmax(0,1fr) auto;gap:8px;align-items:center}
+.commandNumber{display:grid;place-items:center;width:30px;height:30px;border-radius:9px;background:rgba(148,163,184,.12);font-size:12px;font-weight:800}
+.commandRemoveBtn{padding:9px}.adminPluginRow code{white-space:pre-wrap}

@@ -8,6 +8,11 @@ commands:
   asmpbridge:
     description: Shows AevonSMPBridge status or reloads its configuration.
     usage: /asmpbridge [reload]
+    permission: aevonsmpbridge.admin
+  aevonbridgereload:
+    description: Reloads AevonSMPBridge configuration without restarting the server.
+    usage: /aevonbridgereload
+    permission: aevonsmpbridge.admin
 permissions:
   aevonsmpbridge.admin:
     description: Allows AevonSMPBridge administration.

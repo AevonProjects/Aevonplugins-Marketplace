@@ -33,41 +33,76 @@ public final class AevonSMPBridge extends JavaPlugin {
         saveDefaultConfig();
         processedFile = new File(getDataFolder(), "processed-orders.txt");
         loadProcessed();
-        http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(Math.max(3, getConfig().getInt("request-timeout-seconds", 10)))).build();
+        buildHttpClient();
         startTask();
         getLogger().info("AevonSMPBridge v" + getDescription().getVersion() + " enabled. Delivery check interval: " + getConfig().getInt("check-interval-seconds", 5) + " seconds.");
     }
 
     @Override public void onDisable() { if (task != null) task.cancel(); }
 
+    private void buildHttpClient() {
+        http = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(Math.max(3, getConfig().getInt("request-timeout-seconds", 10))))
+                .followRedirects(HttpClient.Redirect.ALWAYS)
+                .build();
+    }
+
     private void startTask() {
         if (task != null) task.cancel();
         long ticks = Math.max(1, getConfig().getInt("check-interval-seconds", 5)) * 20L;
-        task = Bukkit.getScheduler().runTaskTimerAsynchronously(this, this::sync, 20L, ticks);
+        task = Bukkit.getScheduler().runTaskTimer(this, this::queueSync, 20L, ticks);
     }
 
-    private void sync() {
+    private void queueSync() {
         if (syncing) return;
-        String secret = getConfig().getString("bridge-secret", "");
-        String website = getConfig().getString("website-url", "").replaceAll("/+$", "");
+
+        String secret = getConfig().getString("bridge-secret", "").trim();
+        String website = getConfig().getString("website-url", "").trim().replaceAll("/+$", "");
         if (secret.isBlank() || secret.startsWith("CHANGE-ME") || website.isBlank()) return;
+
+        List<PlayerSnapshot> players = new ArrayList<>();
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            players.add(new PlayerSnapshot(p.getName(), p.getUniqueId().toString()));
+        }
+
+        List<Ack> sentAcks = new ArrayList<>();
+        Ack a;
+        while ((a = acknowledgements.poll()) != null) sentAcks.add(a);
+
+        String payload = buildPayload(players, sentAcks);
         syncing = true;
+        Bukkit.getScheduler().runTaskAsynchronously(this, () -> syncHttp(secret, website, payload, sentAcks));
+    }
+
+    private void syncHttp(String secret, String website, String payload, List<Ack> sentAcks) {
         try {
-            List<PlayerSnapshot> players = new ArrayList<>();
-            for (Player p : Bukkit.getOnlinePlayers()) players.add(new PlayerSnapshot(p.getName(), p.getUniqueId().toString()));
-            List<Ack> sentAcks = new ArrayList<>(); Ack a; while ((a = acknowledgements.poll()) != null) sentAcks.add(a);
-            String payload = buildPayload(players, sentAcks);
             HttpRequest req = HttpRequest.newBuilder(URI.create(website + "/api/aevonsmp/bridge/sync"))
                     .timeout(Duration.ofSeconds(Math.max(3, getConfig().getInt("request-timeout-seconds", 10))))
-                    .header("Content-Type", "application/json").header("X-AevonSMP-Secret", secret)
-                    .POST(HttpRequest.BodyPublishers.ofString(payload, StandardCharsets.UTF_8)).build();
+                    .header("Content-Type", "application/json")
+                    .header("X-AevonSMP-Secret", secret)
+                    .POST(HttpRequest.BodyPublishers.ofString(payload, StandardCharsets.UTF_8))
+                    .build();
+
             HttpResponse<String> res = http.send(req, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-            if (res.statusCode() / 100 != 2) { sentAcks.forEach(acknowledgements::offer); getLogger().warning("Bridge sync returned HTTP " + res.statusCode()); return; }
+            if (res.statusCode() / 100 != 2) {
+                sentAcks.forEach(acknowledgements::offer);
+                String responseBody = res.body() == null ? "" : res.body().replace("\n", " ").replace("\r", " ");
+                if (responseBody.length() > 300) responseBody = responseBody.substring(0, 300);
+                getLogger().warning("Bridge sync returned HTTP " + res.statusCode()
+                        + (responseBody.isBlank() ? "" : " - " + responseBody));
+                return;
+            }
+
             List<Order> orders = parseOrders(res.body());
-            if (!orders.isEmpty()) Bukkit.getScheduler().runTask(this, () -> orders.forEach(this::deliver));
+            if (!orders.isEmpty()) {
+                Bukkit.getScheduler().runTask(this, () -> orders.forEach(this::deliver));
+            }
         } catch (Exception ex) {
+            sentAcks.forEach(acknowledgements::offer);
             getLogger().warning("Bridge sync failed: " + ex.getMessage());
-        } finally { syncing = false; }
+        } finally {
+            syncing = false;
+        }
     }
 
     private void deliver(Order o) {
@@ -83,22 +118,47 @@ public final class AevonSMPBridge extends JavaPlugin {
             return;
         }
         try {
+            List<String> rewardCommands = Arrays.stream(o.rewardCommand.split("\\r?\\n"))
+                    .map(String::trim)
+                    .filter(s -> !s.isBlank())
+                    .limit(5)
+                    .toList();
+            if (rewardCommands.isEmpty()) throw new IllegalStateException("No reward commands configured.");
+
             int executions = "per_quantity".equalsIgnoreCase(o.commandMode) ? Math.max(1, o.quantity) : 1;
             for (int i = 0; i < executions; i++) {
-                String command = o.rewardCommand
-                        .replace("{player}", player.getName())
-                        .replace("{quantity}", String.valueOf(o.quantity))
-                        .replace("{order_id}", o.orderCode)
-                        .replace("{product}", o.productName);
-                boolean ok = Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command);
-                if (!ok) throw new IllegalStateException("Command returned false: " + command);
+                for (String template : rewardCommands) {
+                    String command = template
+                            .replace("{player}", player.getName())
+                            .replace("{quantity}", String.valueOf(o.quantity))
+                            .replace("{order_id}", o.orderCode)
+                            .replace("{product}", o.productName);
+                    boolean ok = Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command);
+                    if (!ok) throw new IllegalStateException("Command returned false: " + command);
+                }
             }
+
             markProcessed(o.id);
             inventoryNoticeSent.remove(o.id);
-            String delivered = color(getConfig().getString("messages.reward-delivered", "&aReward delivered!")).replace("{product}", o.productName);
+
+            String delivered = color(getConfig().getString("messages.reward-delivered", "&aReward delivered!"))
+                    .replace("{product}", o.productName);
             player.sendMessage(delivered);
-            acknowledgements.offer(new Ack(o.id, "delivered", "Reward command completed."));
-            getLogger().info("Delivered order " + o.orderCode + " to " + player.getName() + ".");
+
+            if (getConfig().getBoolean("purchase-broadcast.enabled", true)) {
+                String broadcast = color(getConfig().getString(
+                        "purchase-broadcast.message",
+                        "&6[AevonSMP Store] &f{player} &ejust purchased &f{product} x{quantity}&e! Thank you for supporting the server!"
+                ))
+                        .replace("{player}", player.getName())
+                        .replace("{product}", o.productName)
+                        .replace("{quantity}", String.valueOf(o.quantity))
+                        .replace("{order_id}", o.orderCode);
+                for (Player online : Bukkit.getOnlinePlayers()) online.sendMessage(broadcast);
+            }
+
+            acknowledgements.offer(new Ack(o.id, "delivered", rewardCommands.size() + " reward command(s) completed."));
+            getLogger().info("Delivered order " + o.orderCode + " to " + player.getName() + " using " + rewardCommands.size() + " command(s).");
         } catch (Exception ex) {
             acknowledgements.offer(new Ack(o.id, "failed", ex.getMessage()));
             getLogger().severe("Could not deliver order " + o.orderCode + ": " + ex.getMessage());
@@ -123,12 +183,37 @@ public final class AevonSMPBridge extends JavaPlugin {
     }
 
     @Override public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        if (!sender.hasPermission("aevonsmpbridge.admin")) { sender.sendMessage(color("&cYou do not have permission.")); return true; }
-        if (args.length > 0 && args[0].equalsIgnoreCase("reload")) { reloadConfig(); startTask(); sender.sendMessage(color("&aAevonSMPBridge configuration reloaded.")); return true; }
+        if (!sender.hasPermission("aevonsmpbridge.admin")) {
+            sender.sendMessage(color("&cYou do not have permission."));
+            return true;
+        }
+
+        boolean directReload = command.getName().equalsIgnoreCase("aevonbridgereload");
+        boolean subReload = command.getName().equalsIgnoreCase("asmpbridge")
+                && args.length > 0 && args[0].equalsIgnoreCase("reload");
+
+        if (directReload || subReload) {
+            reloadConfig();
+            buildHttpClient();
+            startTask();
+
+            String secret = getConfig().getString("bridge-secret", "").trim();
+            sender.sendMessage(color("&aAevonSMPBridge configuration reloaded."));
+            sender.sendMessage(color("&7Website: &f" + getConfig().getString("website-url", "")));
+            sender.sendMessage(color("&7Interval: &f" + getConfig().getInt("check-interval-seconds", 5) + "s"));
+            sender.sendMessage(color("&7Bridge secret loaded: &f" + (!secret.isBlank())));
+            sender.sendMessage(color("&7Bridge secret length: &f" + secret.length()));
+            return true;
+        }
+
+        String secret = getConfig().getString("bridge-secret", "").trim();
         sender.sendMessage(color("&bAevonSMPBridge &fv" + getDescription().getVersion()));
-        sender.sendMessage(color("&7Website: &f" + getConfig().getString("website-url")));
+        sender.sendMessage(color("&7Website: &f" + getConfig().getString("website-url", "")));
         sender.sendMessage(color("&7Interval: &f" + getConfig().getInt("check-interval-seconds", 5) + "s"));
+        sender.sendMessage(color("&7Bridge secret loaded: &f" + (!secret.isBlank())));
+        sender.sendMessage(color("&7Bridge secret length: &f" + secret.length()));
         sender.sendMessage(color("&7Processed locally: &f" + locallyProcessed.size()));
+        sender.sendMessage(color("&7Reload: &f/aevonbridgereload"));
         return true;
     }
 

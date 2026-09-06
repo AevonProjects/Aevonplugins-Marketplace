@@ -6,7 +6,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const { id } = await params; const b = await request.json();
   const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
   for (const key of ["name","description","image_url"] as const) if (key in b) row[key] = String(b[key] || "").trim() || null;
-  if ("reward_command" in b) row.reward_command = String(b.reward_command || "").trim().replace(/^\//, "");
+  if ("reward_command" in b) {
+    const commands = String(b.reward_command || "").split(/\r?\n/).map(v=>v.trim().replace(/^\/+/, "")).filter(Boolean);
+    if (commands.length < 1 || commands.length > 5) return NextResponse.json({ error: "A product must have between 1 and 5 reward commands." }, { status: 400 });
+    row.reward_command = commands.join("\n");
+  }
   if ("price" in b) row.price = Math.max(0, Number(b.price || 0));
   if ("required_free_slots" in b) row.required_free_slots = Math.max(0, Math.min(36, Number(b.required_free_slots || 0)));
   if ("max_quantity" in b) row.max_quantity = Math.max(1, Math.min(999, Number(b.max_quantity || 1)));

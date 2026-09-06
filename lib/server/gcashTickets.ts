@@ -45,3 +45,18 @@ export async function syncTicketStatus(admin: any, orderKind: "marketplace" | "a
     .eq("order_kind", orderKind)
     .eq("order_id", orderId);
 }
+
+
+export async function deleteGcashTicketPermanently(admin: any, ticketId: string) {
+  const { data: files } = await admin.storage.from("gcash-ticket-images").list(ticketId, { limit: 1000 });
+  if (files?.length) {
+    await admin.storage.from("gcash-ticket-images").remove(files.map((f: any) => `${ticketId}/${f.name}`));
+  }
+  const { error } = await admin.from("gcash_tickets").delete().eq("id", ticketId);
+  if (error) throw new Error(error.message);
+}
+
+export async function deleteGcashTicketForOrder(admin: any, orderKind: "marketplace" | "aevonsmp", orderId: string) {
+  const { data: ticket } = await admin.from("gcash_tickets").select("id").eq("order_kind", orderKind).eq("order_id", orderId).maybeSingle();
+  if (ticket?.id) await deleteGcashTicketPermanently(admin, ticket.id);
+}

@@ -6,28 +6,43 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if ("error" in auth) return NextResponse.json({ error: auth.error }, { status: auth.status });
   const { id } = await params;
 
-  let body: { message?: string };
+  let body: { message?: string; imagePath?: string };
   try { body = await request.json(); } catch { return NextResponse.json({ error: "Invalid request." }, { status: 400 }); }
+
   const message = String(body.message || "").trim();
-  if (!message || message.length > 4000) return NextResponse.json({ error: "Message must be between 1 and 4000 characters." }, { status: 400 });
+  const imagePath = String(body.imagePath || "").trim() || null;
+  if (!message && !imagePath) return NextResponse.json({ error: "Write a message or attach a picture." }, { status: 400 });
+  if (message.length > 4000) return NextResponse.json({ error: "Message cannot exceed 4000 characters." }, { status: 400 });
 
   const { data: profile } = await auth.admin.from("profiles").select("role").eq("id", auth.user.id).maybeSingle();
   const isAdmin = profile?.role === "admin";
 
   const { data: ticket } = await auth.admin
     .from("gcash_tickets")
-    .select("id,user_id")
+    .select("id,user_id,status")
     .eq("id", id)
     .maybeSingle();
 
   if (!ticket || (!isAdmin && ticket.user_id !== auth.user.id)) {
     return NextResponse.json({ error: "Ticket not found." }, { status: 404 });
   }
+  if (ticket.status === "closed") return NextResponse.json({ error: "This ticket is closed." }, { status: 409 });
+
+  if (imagePath) {
+    const prefix = `${id}/`;
+    if (!imagePath.startsWith(prefix)) return NextResponse.json({ error: "Invalid ticket image." }, { status: 400 });
+  }
 
   const { data, error } = await auth.admin
     .from("gcash_ticket_messages")
-    .insert({ ticket_id: id, user_id: auth.user.id, sender_role: isAdmin ? "admin" : "buyer", message })
-    .select("id,user_id,sender_role,message,created_at")
+    .insert({
+      ticket_id: id,
+      user_id: auth.user.id,
+      sender_role: isAdmin ? "admin" : "buyer",
+      message: message || null,
+      image_path: imagePath
+    })
+    .select("id,user_id,sender_role,message,image_path,created_at")
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

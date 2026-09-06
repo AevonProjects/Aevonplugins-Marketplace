@@ -21,10 +21,23 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
   const { data: messages, error: msgError } = await auth.admin
     .from("gcash_ticket_messages")
-    .select("id,user_id,sender_role,message,created_at")
+    .select("id,user_id,sender_role,message,image_path,created_at")
     .eq("ticket_id", id)
     .order("created_at", { ascending: true });
 
   if (msgError) return NextResponse.json({ error: msgError.message }, { status: 500 });
-  return NextResponse.json({ ticket, messages: messages || [], viewer: { id: auth.user.id, role: isAdmin ? "admin" : "buyer" } });
+
+  const resolved = await Promise.all((messages || []).map(async (m: any) => {
+    if (!m.image_path) return { ...m, image_url: null };
+    const { data } = await auth.admin.storage
+      .from("gcash-ticket-images")
+      .createSignedUrl(m.image_path, 60 * 30);
+    return { ...m, image_url: data?.signedUrl || null };
+  }));
+
+  return NextResponse.json({
+    ticket,
+    messages: resolved,
+    viewer: { id: auth.user.id, role: isAdmin ? "admin" : "buyer" }
+  });
 }
