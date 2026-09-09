@@ -157,17 +157,12 @@ export default function AdminPage() {
   const loadPlugins = useCallback(async () => {
     if (!supabase) return;
     setLoadingPlugins(true);
-    const { data, error } = await supabase
-      .from("plugins")
-      .select("id,name,slug,description,description_html,version,price,status,created_at,updated_at,file_name,file_path,file_size,gallery_images,profile_image_url,wiki_url,youtube_url,discord_url,paper_versions,purpur_versions")
-      .order("created_at", { ascending: false });
-
+    const {data:s}=await supabase.auth.getSession(); const token=s.session?.access_token;
+    const response=await fetch("/api/admin/plugins",{headers:{Authorization:`Bearer ${token}`},cache:"no-store"});
+    const body=await response.json();
     setLoadingPlugins(false);
-    if (error) {
-      setNotice({ type: "error", text: `Could not load plugins: ${error.message}` });
-      return;
-    }
-    setPlugins((data ?? []) as PluginRow[]);
+    if (!response.ok) { setNotice({type:"error",text:`Could not load plugins: ${body.error||"Request failed."}`}); return; }
+    setPlugins((body.plugins ?? []) as PluginRow[]);
   }, []);
 
   const loadOrders = useCallback(async () => {
@@ -290,19 +285,19 @@ export default function AdminPage() {
       const plain = plainFromHtml(safeHtml) || description.trim();
       const payload = { name:name.trim(), slug:normalizedSlug, description:plain.slice(0,1000), description_html:safeHtml.trim(), version:editingPlugin ? (editingPlugin.version ?? version.trim()) : version.trim(), price:Number(price)||0, status, wiki_url:wikiUrl.trim()||null, youtube_url:youtubeUrl.trim()||null, discord_url:discordUrl.trim()||null, paper_versions:paperVersions, purpur_versions:purpurVersions, updated_at:new Date().toISOString() };
       let pluginId = editingId;
-      if (editingId) { const r=await supabase.from("plugins").update(payload).eq("id",editingId); if(r.error) throw r.error; }
-      else { const r=await supabase.from("plugins").insert(payload).select("id").single(); if(r.error) throw r.error; pluginId=r.data.id; }
+      const {data:sessionData}=await supabase.auth.getSession(); const adminToken=sessionData.session?.access_token;
+      const saveResponse=await fetch(editingId?`/api/admin/plugins/${editingId}`:"/api/admin/plugins",{method:editingId?"PATCH":"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${adminToken}`},body:JSON.stringify(payload)});
+      const saveBody=await saveResponse.json(); if(!saveResponse.ok) throw new Error(saveBody.error||"Could not save plugin."); if(!editingId) pluginId=saveBody.id;
       if (!pluginId) throw new Error("Could not determine plugin ID.");
       if (jarFile) await uploadJarById(pluginId, name.trim(), jarFile, version.trim(), releaseType, releaseNotes.trim() || (editingPlugin?.file_name ? "" : "Initial release."));
       if (profileImageFile) {
         const profileUrl = await uploadMedia(pluginId, profileImageFile);
-        const r = await supabase.from("plugins").update({profile_image_url:profileUrl,updated_at:new Date().toISOString()}).eq("id",pluginId);
-        if (r.error) throw r.error;
+        const r=await fetch(`/api/admin/plugins/${pluginId}`,{method:"PATCH",headers:{"Content-Type":"application/json",Authorization:`Bearer ${adminToken}`},body:JSON.stringify({profile_image_url:profileUrl})}); const rb=await r.json(); if(!r.ok) throw new Error(rb.error||"Could not save profile image.");
       }
       if (galleryFiles.some(Boolean)) {
         const urls:string[]=[];
         for (let i=0;i<3;i++) { const f=galleryFiles[i]; if(f) urls[i]=await uploadMedia(pluginId,f); else if(existingImages[i]) urls[i]=existingImages[i]; }
-        const r=await supabase.from("plugins").update({gallery_images:urls.filter(Boolean),updated_at:new Date().toISOString()}).eq("id",pluginId); if(r.error) throw r.error;
+        const r=await fetch(`/api/admin/plugins/${pluginId}`,{method:"PATCH",headers:{"Content-Type":"application/json",Authorization:`Bearer ${adminToken}`},body:JSON.stringify({gallery_images:urls.filter(Boolean)})}); const rb=await r.json(); if(!r.ok) throw new Error(rb.error||"Could not save gallery images.");
       }
       setNotice({type:"success",text:editingId?"Plugin listing updated successfully.":"Plugin created and uploaded successfully."});
       resetForm(); await loadPlugins();
@@ -337,24 +332,10 @@ export default function AdminPage() {
       text: `${nextStatus === "published" ? "Publishing" : "Unpublishing"} ${plugin.name}…`,
     });
 
-    const { error } = await supabase
-      .from("plugins")
-      .update({ status: nextStatus, updated_at: new Date().toISOString() })
-      .eq("id", plugin.id);
-
-    if (error) {
-      setNotice({ type: "error", text: error.message });
-      return;
-    }
-
-    const { error: releaseVisibilityError } = await supabase
-      .from("plugin_versions")
-      .update({ is_published: nextStatus === "published" })
-      .eq("plugin_id", plugin.id);
-    if (releaseVisibilityError) {
-      setNotice({ type: "error", text: `Plugin status changed, but version visibility could not be synchronized: ${releaseVisibilityError.message}` });
-      return;
-    }
+    const {data:ss}=await supabase.auth.getSession(); const t=ss.session?.access_token;
+    const response=await fetch(`/api/admin/plugins/${plugin.id}`,{method:"PATCH",headers:{"Content-Type":"application/json",Authorization:`Bearer ${t}`},body:JSON.stringify({status:nextStatus})});
+    const body=await response.json();
+    if(!response.ok){setNotice({type:"error",text:body.error||"Could not change plugin status."});return;}
 
     setNotice({
       type: "success",
@@ -371,12 +352,10 @@ export default function AdminPage() {
     if (!confirmed) return;
 
     setNotice({ type: "info", text: `Deleting ${plugin.name}…` });
-    const { error } = await supabase.from("plugins").delete().eq("id", plugin.id);
-
-    if (error) {
-      setNotice({ type: "error", text: error.message });
-      return;
-    }
+    const {data:ss}=await supabase.auth.getSession(); const t=ss.session?.access_token;
+    const response=await fetch(`/api/admin/plugins/${plugin.id}`,{method:"DELETE",headers:{Authorization:`Bearer ${t}`}});
+    const body=await response.json();
+    if(!response.ok){setNotice({type:"error",text:body.error||"Could not delete plugin."});return;}
 
     if (editingId === plugin.id) resetForm();
     setNotice({ type: "success", text: `${plugin.name} was deleted.` });

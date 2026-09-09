@@ -3,7 +3,9 @@ import { requireUser } from "@/lib/server/supabaseAdmin";
 
 const BUCKET = "aevonsmp-forum-media";
 const VIDEO_LIMIT = 20 * 1024 * 1024;
-const IMAGE_LIMIT = 20 * 1024 * 1024;
+const IMAGE_LIMIT = 10 * 1024 * 1024;
+const IMAGE_TYPES = new Set(["image/jpeg","image/png","image/webp","image/gif"]);
+const VIDEO_TYPES = new Set(["video/mp4","video/webm","video/quicktime"]);
 
 async function ensureBucket(admin:any){
   const {data,error}=await admin.storage.getBucket(BUCKET);
@@ -14,7 +16,7 @@ async function ensureBucket(admin:any){
   const {error:createError}=await admin.storage.createBucket(BUCKET,{
     public:true,
     fileSizeLimit:VIDEO_LIMIT,
-    allowedMimeTypes:["image/*","video/*"]
+    allowedMimeTypes:[...IMAGE_TYPES,...VIDEO_TYPES]
   });
   if(createError){
     const m=String(createError.message||"").toLowerCase();
@@ -25,7 +27,7 @@ async function ensureBucket(admin:any){
 function safeExt(name:string,type:string){
   const fromName=(name.split('.').pop()||'').replace(/[^a-zA-Z0-9]/g,'').slice(0,8).toLowerCase();
   if(fromName)return fromName;
-  const map:Record<string,string>={"image/jpeg":"jpg","image/png":"png","image/webp":"webp","image/gif":"gif","image/svg+xml":"svg","video/mp4":"mp4","video/webm":"webm","video/quicktime":"mov"};
+  const map:Record<string,string>={"image/jpeg":"jpg","image/png":"png","image/webp":"webp","image/gif":"gif","video/mp4":"mp4","video/webm":"webm","video/quicktime":"mov"};
   return map[type]||(type.startsWith('image/')?'img':'video');
 }
 
@@ -38,8 +40,8 @@ export async function POST(request:Request){
   const contentType=String(b.contentType||'').toLowerCase();
   const size=Number(b.size||0);
   if(kind!=='image'&&kind!=='video')return NextResponse.json({error:'Media type must be image or video.'},{status:400});
-  if(kind==='image'&&!contentType.startsWith('image/'))return NextResponse.json({error:'The selected picture is not a valid image file.'},{status:400});
-  if(kind==='video'&&!contentType.startsWith('video/'))return NextResponse.json({error:'The selected file is not a valid video.'},{status:400});
+  if(kind==='image'&&!IMAGE_TYPES.has(contentType))return NextResponse.json({error:'The selected picture is not a valid image file.'},{status:400});
+  if(kind==='video'&&!VIDEO_TYPES.has(contentType))return NextResponse.json({error:'The selected file is not a valid video.'},{status:400});
   const limit=kind==='video'?VIDEO_LIMIT:IMAGE_LIMIT;
   if(!Number.isFinite(size)||size<=0||size>limit)return NextResponse.json({error:kind==='video'?'Video must be 20 MB or smaller.':'Image must be 20 MB or smaller.'},{status:400});
   try{

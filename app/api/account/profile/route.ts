@@ -33,7 +33,15 @@ export async function PATCH(request: Request) {
     }
   }
 
-  if (typeof body.avatar_url === "string" && body.avatar_url.startsWith("http")) patch.avatar_url = body.avatar_url;
+  if (typeof body.avatar_url === "string") {
+    try {
+      const avatar = new URL(body.avatar_url);
+      const project = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL || "https://invalid.local");
+      const ownPrefix = `/storage/v1/object/public/profile-avatars/${auth.user.id}/`;
+      if (avatar.protocol === "https:" && avatar.host === project.host && avatar.pathname.startsWith(ownPrefix)) patch.avatar_url = avatar.toString();
+      else return NextResponse.json({ error: "Profile pictures must be uploaded through your Aevon account." }, { status: 400 });
+    } catch { return NextResponse.json({ error: "Invalid profile picture URL." }, { status: 400 }); }
+  }
 
   let result;
   if (currentResult.data) {
