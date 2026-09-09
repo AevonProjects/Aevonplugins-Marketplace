@@ -1,9 +1,16 @@
 import { NextResponse } from 'next/server';
 import { requireUser, getSupabaseAdmin } from '@/lib/server/supabaseAdmin';
+import { internalError } from '@/lib/server/apiError';
 
-export async function GET(_r: Request, { params }: { params: Promise<{ pluginId: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ pluginId: string }> }) {
   const { pluginId } = await params;
   const a = getSupabaseAdmin();
+  let viewerId: string | null = null;
+  const viewerToken = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+  if (viewerToken) {
+    const { data: viewer } = await a.auth.getUser(viewerToken);
+    viewerId = viewer.user?.id || null;
+  }
 
   const { data, error } = await a
     .from('plugin_reviews')
@@ -18,7 +25,7 @@ export async function GET(_r: Request, { params }: { params: Promise<{ pluginId:
         reviews: [],
         error: migrationMissing
           ? 'The Ratings & Reviews database migration has not been installed yet. Run supabase/REVIEW-SYSTEM-WITH-ADMIN-REPLIES.sql in Supabase SQL Editor.'
-          : error.message,
+          : 'Reviews are temporarily unavailable.',
       },
       { status: 500 },
     );
@@ -51,18 +58,30 @@ export async function GET(_r: Request, { params }: { params: Promise<{ pluginId:
   const replyMap = new Map(
     replyRows.map((x: any) => [
       x.review_id,
-      { ...x, admin_profile: adminMap.get(x.admin_user_id) || null },
+      {
+        id: x.id,
+        review_id: x.review_id,
+        reply: x.reply,
+        created_at: x.created_at,
+        updated_at: x.updated_at,
+        admin_profile: adminMap.get(x.admin_user_id) || null
+      },
     ]),
   );
 
   return NextResponse.json({
     reviews: (data || []).map((x: any) => ({
-      ...x,
+      id: x.id,
+      rating: x.rating,
+      feedback: x.feedback,
+      created_at: x.created_at,
+      updated_at: x.updated_at,
+      is_mine: Boolean(viewerId && viewerId === x.user_id),
       profiles: profileMap.get(x.user_id) || null,
       admin_reply: replyMap.get(x.id) || null,
     })),
     repliesReady: !replyError,
-  });
+  }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function POST(r: Request, { params }: { params: Promise<{ pluginId: string }> }) {
@@ -103,6 +122,6 @@ export async function POST(r: Request, { params }: { params: Promise<{ pluginId:
     .single();
 
   return error
-    ? NextResponse.json({ error: error.message }, { status: 500 })
+    ? internalError("Could not save your review.", error)
     : NextResponse.json({ review: data });
 }

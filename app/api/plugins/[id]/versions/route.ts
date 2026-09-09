@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/server/supabaseAdmin';
+import { internalError } from '@/lib/server/apiError';
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -12,6 +13,6 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     .order('is_latest', { ascending: false })
     .order('created_at', { ascending: false });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return internalError('Version history is temporarily unavailable.', error);
   return NextResponse.json({ versions: data ?? [] });
 }

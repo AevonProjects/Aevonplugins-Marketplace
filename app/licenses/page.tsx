@@ -42,30 +42,27 @@ export default function LicensesPage() {
       return;
     }
 
-    let { data, error: queryError } = await supabase
-      .from("licenses")
-      .select("id,license_key,status,download_count,last_download_at,server_id,server_ip,activated_at,last_validated_at,plugins(name,version)")
-      .order("created_at", { ascending: false });
-
-    // Older databases may not have server_ip yet. Keep the page usable while
-    // the included Supabase hotfix is being applied.
-    if (queryError && queryError.message.toLowerCase().includes("server_ip")) {
-      const fallback = await supabase
-        .from("licenses")
-        .select("id,license_key,status,download_count,last_download_at,server_id,activated_at,last_validated_at,plugins(name,version)")
-        .order("created_at", { ascending: false });
-      data = fallback.data as typeof data;
-      queryError = fallback.error;
-    }
-
-    if (queryError) {
-      setMessage("");
-      setError(queryError.message);
+    const token = await getToken();
+    if (!token) {
+      setMessage("Sign in to view your licenses.");
       return;
     }
 
-    setRows((data ?? []) as unknown as LicenseRow[]);
-    setMessage(data?.length ? "" : "No licenses have been assigned to this account yet.");
+    const response = await fetch("/api/account/licenses", {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store"
+    });
+    const body = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      setMessage("");
+      setError(body.error || "Could not load your licenses.");
+      return;
+    }
+
+    const data = body.licenses || [];
+    setRows(data as LicenseRow[]);
+    setMessage(data.length ? "" : "No licenses have been assigned to this account yet.");
   }, []);
 
   useEffect(() => {

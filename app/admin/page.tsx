@@ -168,19 +168,19 @@ export default function AdminPage() {
   const loadOrders = useCallback(async () => {
     if (!supabase) return;
     setLoadingOrders(true);
-    const { data, error } = await supabase
-      .from("marketplace_orders")
-      .select("id,order_code,customer_email,amount,currency,payment_method,status,created_at,plugin_id,plugins(name)")
-      .eq("payment_method", "gcash")
-      .eq("admin_hidden", false)
-      .order("created_at", { ascending: false })
-      .limit(100);
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token;
+    const response = await fetch("/api/admin/orders", {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      cache: "no-store"
+    });
+    const body = await response.json().catch(() => ({}));
     setLoadingOrders(false);
-    if (error) {
-      setNotice({ type: "error", text: `Could not load payment orders: ${error.message}` });
+    if (!response.ok) {
+      setNotice({ type: "error", text: body.error || "Could not load payment orders." });
       return;
     }
-    setOrders((data ?? []) as unknown as OrderRow[]);
+    setOrders((body.orders ?? []) as OrderRow[]);
   }, []);
 
   useEffect(() => {

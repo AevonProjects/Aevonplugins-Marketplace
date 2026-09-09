@@ -49,7 +49,7 @@ export async function POST(request:Request){
     const ext=safeExt(fileName,contentType);
     const path=`${auth.user.id}/${kind}-${crypto.randomUUID()}.${ext}`;
     const {data,error}=await auth.admin.storage.from(BUCKET).createSignedUploadUrl(path);
-    if(error||!data)return NextResponse.json({error:error?.message||'Could not prepare media upload.'},{status:500});
+    if(error||!data){console.error('Forum media signed upload failed:',error);return NextResponse.json({error:'Could not prepare media upload.'},{status:500});}
     const publicUrl=auth.admin.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
     return NextResponse.json({path,token:data.token,publicUrl,bucket:BUCKET});
   }catch(e:any){

@@ -177,23 +177,20 @@ export default function PluginDetailPage() {
           setIsAdmin(false);
         }
 
-        const [{ data: accessData }, { data: licenseData }] = await Promise.all([
-          supabase
-            .from("user_plugins")
-            .select("id,access_type,created_at")
-            .eq("user_id", user.id)
-            .eq("plugin_id", resolvedPlugin.id)
-            .maybeSingle(),
-          supabase
-            .from("licenses")
-            .select("id,license_key,status,download_count,last_download_at,created_at")
-            .eq("user_id", user.id)
-            .eq("plugin_id", resolvedPlugin.id)
-            .maybeSingle()
-        ]);
-
-        setAccess((accessData as AccessRow | null) ?? null);
-        setLicense((licenseData as LicenseRow | null) ?? null);
+        if (token) {
+          const ownershipRes = await fetch(`/api/account/ownership?pluginId=${encodeURIComponent(resolvedPlugin.id)}`, {
+            headers: { Authorization: `Bearer ${token}` },
+            cache: "no-store"
+          });
+          const ownershipBody = await ownershipRes.json().catch(() => ({}));
+          if (ownershipRes.ok) {
+            setAccess((ownershipBody.access as AccessRow | null) ?? null);
+            setLicense((ownershipBody.license as LicenseRow | null) ?? null);
+          } else {
+            setAccess(null);
+            setLicense(null);
+          }
+        }
       }
 
       setLoading(false);

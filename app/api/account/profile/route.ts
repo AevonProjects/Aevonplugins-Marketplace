@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/server/supabaseAdmin";
+import { internalError } from "@/lib/server/apiError";
 
 export async function PATCH(request: Request) {
   const auth = await requireUser(request);
@@ -15,7 +16,7 @@ export async function PATCH(request: Request) {
     .select("nickname,nickname_changed_at")
     .eq("id", auth.user.id)
     .maybeSingle();
-  if (currentResult.error) return NextResponse.json({ error: currentResult.error.message }, { status: 500 });
+  if (currentResult.error) return internalError("Could not load your profile.", currentResult.error);
 
   if (typeof body.nickname === "string") {
     const nickname = body.nickname.trim();
@@ -60,6 +61,6 @@ export async function PATCH(request: Request) {
   }
 
   return result.error
-    ? NextResponse.json({ error: result.error.message }, { status: 500 })
+    ? internalError("Could not update your profile.", result.error)
     : NextResponse.json({ profile: result.data });
 }

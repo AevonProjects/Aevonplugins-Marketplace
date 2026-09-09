@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 
 type Review = {
   id: string;
-  user_id: string;
+  is_mine?: boolean;
   rating: number;
   feedback: string;
   created_at: string;
@@ -15,7 +15,6 @@ type Review = {
   admin_reply?: {
     id: string;
     review_id: string;
-    admin_user_id: string;
     reply: string;
     created_at: string;
     updated_at: string;
@@ -46,16 +45,18 @@ export default function PluginReviews({ pluginId, owned, signedIn }: { pluginId:
   }
 
   async function load() {
-    const r = await fetch(`/api/reviews/${pluginId}`, { cache: 'no-store' });
+    const sessionToken = await token();
+    const r = await fetch(`/api/reviews/${pluginId}`, {
+      headers: sessionToken ? { Authorization: `Bearer ${sessionToken}` } : undefined,
+      cache: 'no-store'
+    });
     const b = await r.json();
     setReviews(b.reviews || []);
     setRepliesReady(b.repliesReady !== false);
     if (!r.ok && b.error) setMsg(b.error);
 
     if (supabase) {
-      const sessionToken = await token();
-      const u = (await supabase.auth.getUser()).data.user;
-      const mine = (b.reviews || []).find((x: any) => x.user_id === u?.id);
+      const mine = (b.reviews || []).find((x: any) => x.is_mine === true);
       if (mine) {
         setRating(mine.rating);
         setFeedback(mine.feedback);

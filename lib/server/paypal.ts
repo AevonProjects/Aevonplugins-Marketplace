@@ -1,3 +1,4 @@
+import "server-only";
 const PAYPAL_SANDBOX = "https://api-m.sandbox.paypal.com";
 const PAYPAL_LIVE = "https://api-m.paypal.com";
 

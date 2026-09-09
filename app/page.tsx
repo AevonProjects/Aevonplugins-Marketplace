@@ -75,16 +75,16 @@ export default function MarketplacePage() {
         // Show PURCHASED on paid marketplace cards the signed-in customer already bought.
         const { data: authData } = await supabase.auth.getUser();
         if (authData.user) {
-          const { data: purchases, error: purchasesError } = await supabase
-            .from("user_plugins")
-            .select("plugin_id")
-            .eq("user_id", authData.user.id)
-            .eq("access_type", "purchase");
-
-          if (!purchasesError) {
-            setPurchasedPluginIds(new Set((purchases ?? []).map((row: any) => String(row.plugin_id))));
+          const { data: sessionData } = await supabase.auth.getSession();
+          const token = sessionData.session?.access_token;
+          if (token) {
+            const ownershipRes = await fetch("/api/account/ownership", {
+              headers: { Authorization: `Bearer ${token}` },
+              cache: "no-store"
+            });
+            const ownershipBody = await ownershipRes.json().catch(() => ({}));
+            setPurchasedPluginIds(new Set(ownershipRes.ok ? (ownershipBody.pluginIds || []).map((id: any) => String(id)) : []));
           } else {
-            console.error("Failed to load purchased marketplace plugins:", purchasesError);
             setPurchasedPluginIds(new Set());
           }
         } else {
