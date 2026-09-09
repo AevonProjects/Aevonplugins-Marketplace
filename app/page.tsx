@@ -30,70 +30,53 @@ export default function MarketplacePage() {
   const railRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    let cancelled = false;
+
     async function load() {
       setLoading(true);
       setLoadError(null);
-      if (!supabase) {
-        setPlugins([]);
-        setLoadError("Marketplace database is not configured.");
-        setLoading(false);
-        return;
-      }
 
-      const { data, error } = await supabase
-        .from("plugins")
-        .select("id,name,slug,description,version,price,status,profile_image_url")
-        .eq("status", "published")
-        .order("created_at", { ascending: false });
+      try {
+        const marketplacePromise = fetch("/api/marketplace", { cache: "default" });
 
-      if (error) {
-        console.error("Failed to load marketplace plugins:", error);
-        setPlugins([]);
-        setLoadError("We couldn't load the marketplace right now. Please try again shortly.");
-      } else {
-        const basePlugins = (data ?? []) as PluginRow[];
-
-        // Always prioritize the release marked as latest in plugin_versions.
-        // This keeps marketplace titles correct even if an older plugins.version
-        // value was left behind by a previous deployment or manual edit.
-        const { data: latestRows } = await supabase
-          .from("plugin_versions")
-          .select("plugin_id,version,is_latest,created_at")
-          .in("plugin_id", basePlugins.map((plugin) => plugin.id))
-          .eq("is_latest", true)
-          .eq("is_published", true);
-
-        const latestByPlugin = new Map(
-          (latestRows ?? []).map((row: any) => [String(row.plugin_id), String(row.version || "").trim()])
-        );
-
-        setPlugins(basePlugins.map((plugin) => ({
-          ...plugin,
-          version: latestByPlugin.get(plugin.id) || plugin.version
-        })));
-
-        // Show PURCHASED on paid marketplace cards the signed-in customer already bought.
-        const { data: authData } = await supabase.auth.getUser();
-        if (authData.user) {
+        const ownershipPromise = (async () => {
+          if (!supabase) return [] as string[];
           const { data: sessionData } = await supabase.auth.getSession();
           const token = sessionData.session?.access_token;
-          if (token) {
-            const ownershipRes = await fetch("/api/account/ownership", {
-              headers: { Authorization: `Bearer ${token}` },
-              cache: "no-store"
-            });
-            const ownershipBody = await ownershipRes.json().catch(() => ({}));
-            setPurchasedPluginIds(new Set(ownershipRes.ok ? (ownershipBody.pluginIds || []).map((id: any) => String(id)) : []));
-          } else {
-            setPurchasedPluginIds(new Set());
-          }
+          if (!token) return [] as string[];
+          const res = await fetch("/api/account/ownership", {
+            headers: { Authorization: `Bearer ${token}` },
+            cache: "no-store"
+          });
+          if (!res.ok) return [] as string[];
+          const body = await res.json().catch(() => ({}));
+          return (body.pluginIds || []).map((id: any) => String(id));
+        })();
+
+        const [marketplaceRes, ownedIds] = await Promise.all([marketplacePromise, ownershipPromise]);
+        const marketplaceBody = await marketplaceRes.json().catch(() => ({}));
+
+        if (cancelled) return;
+        if (!marketplaceRes.ok) {
+          setPlugins([]);
+          setLoadError(marketplaceBody.error || "We couldn't load the marketplace right now. Please try again shortly.");
         } else {
-          setPurchasedPluginIds(new Set());
+          setPlugins((marketplaceBody.plugins || []) as PluginRow[]);
+          setPurchasedPluginIds(new Set(ownedIds));
         }
+      } catch (error) {
+        console.error("Marketplace load failed:", error);
+        if (!cancelled) {
+          setPlugins([]);
+          setLoadError("We couldn't load the marketplace right now. Please try again shortly.");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-      setLoading(false);
     }
-    load();
+
+    void load();
+    return () => { cancelled = true; };
   }, []);
 
   const filtered = useMemo(() => {
@@ -172,10 +155,10 @@ export default function MarketplacePage() {
                     <div className="marketCardVisual">
                       <div className="marketCardGlow" />
                       {plugin.profile_image_url ? (
-                        <img className="marketPluginProfileImage" src={plugin.profile_image_url} alt={`${plugin.name} profile`} />
+                        <img loading="lazy" decoding="async" className="marketPluginProfileImage" src={plugin.profile_image_url} alt={`${plugin.name} profile`} />
                       ) : (
                         <>
-                          <img src="/assets/aevon-bird.png" alt="" />
+                          <img loading="lazy" decoding="async" src="/assets/aevon-bird.png" alt="" />
                           <span className="marketCardInitial">{plugin.name.slice(0, 1).toUpperCase()}</span>
                         </>
                       )}

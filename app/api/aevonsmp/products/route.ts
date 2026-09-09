@@ -11,5 +11,5 @@ export async function GET() {
   ]);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   const fresh = status && Date.now() - new Date(status.last_seen_at).getTime() < 30_000;
-  return NextResponse.json({ products: products || [], server: status ? { ...status, online: Boolean(status.online && fresh), player_names: fresh ? status.player_names : [], players_online: fresh ? status.players_online : 0 } : null }, { headers: { "Cache-Control": "no-store" } });
+  return NextResponse.json({ products: products || [], server: status ? { ...status, online: Boolean(status.online && fresh), player_names: fresh ? status.player_names : [], players_online: fresh ? status.players_online : 0 } : null }, { headers: { "Cache-Control": "public, s-maxage=5, stale-while-revalidate=15" } });
 }
