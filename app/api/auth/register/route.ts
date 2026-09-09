@@ -36,10 +36,11 @@ async function checkProxy(ip: string, apiKey: string) {
 export async function POST(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const hashSecret = process.env.REGISTRATION_IP_HASH_SECRET;
   const proxyCheckKey = process.env.PROXYCHECK_API_KEY;
 
-  if (!supabaseUrl || !serviceRoleKey || !hashSecret || !proxyCheckKey) {
+  if (!supabaseUrl || !serviceRoleKey || !anonKey || !hashSecret || !proxyCheckKey) {
     return NextResponse.json({ error: "Registration security is not fully configured yet." }, { status: 503 });
   }
 
@@ -72,6 +73,13 @@ export async function POST(request: NextRequest) {
   const admin = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false }
   });
+
+  // Use the public/anon Auth client for normal signup + verification email delivery.
+  // Keep the service-role client only for the protected IP-lock table and rollback.
+  const publicAuth = createClient(supabaseUrl, anonKey, {
+    auth: { persistSession: false, autoRefreshToken: false, flowType: "implicit" }
+  });
+
   const registrationHash = ipHash(ip, hashSecret);
 
   const { data: existing, error: lookupError } = await admin
@@ -86,8 +94,9 @@ export async function POST(request: NextRequest) {
   }
   if (existing) return NextResponse.json({ error: "An account has already been registered from this connection." }, { status: 409 });
 
-  const emailRedirectTo = `${request.nextUrl.origin}/login`;
-  const { data: signup, error: signupError } = await admin.auth.signUp({
+  const configuredSiteUrl = String(process.env.NEXT_PUBLIC_SITE_URL || "").trim().replace(/\/+$/, "");
+  const emailRedirectTo = `${configuredSiteUrl || request.nextUrl.origin}/login`;
+  const { data: signup, error: signupError } = await publicAuth.auth.signUp({
     email,
     password,
     options: {

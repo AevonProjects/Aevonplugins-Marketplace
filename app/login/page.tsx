@@ -1,12 +1,14 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { KeyRound, LogIn, LogOut, MailCheck, UserPlus } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { KeyRound, LogIn, LogOut, MailCheck, RefreshCw, UserPlus } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
 type Mode = "login" | "register" | "forgot" | "reset";
 
 export default function LoginPage() {
+  const router = useRouter();
   const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -14,35 +16,77 @@ export default function LoginPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [resendBusy, setResendBusy] = useState(false);
+  const [showResend, setShowResend] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
 
   useEffect(() => {
-    supabase?.auth.getUser().then(({ data }) => setUserEmail(data.user?.email ?? null));
-    const { data } = supabase?.auth.onAuthStateChange((event, session) => {
+    if (!supabase) return;
+
+    supabase.auth.getSession().then(({ data }) => {
+      setUserEmail(data.session?.user.email ?? null);
+    });
+
+    const { data } = supabase.auth.onAuthStateChange((event, session) => {
       setUserEmail(session?.user.email ?? null);
+
+      if (event === "SIGNED_IN" && session?.user) {
+        setMessage("Signed in successfully. Redirecting…");
+        window.setTimeout(() => {
+          router.replace("/account");
+          router.refresh();
+        }, 250);
+      }
+
       if (event === "PASSWORD_RECOVERY") {
         setMode("reset");
         setMessage("Recovery link verified. Choose a new password.");
       }
-    }) ?? { data: null };
-    return () => data?.subscription.unsubscribe();
-  }, []);
+    });
+
+    return () => data.subscription.unsubscribe();
+  }, [router]);
 
   function switchMode(next: Mode) {
     setMode(next);
     setMessage("");
     setPassword("");
     setConfirmPassword("");
+    setShowResend(false);
   }
 
   async function login(e: FormEvent) {
     e.preventDefault();
     if (!supabase) return setMessage("Supabase environment variables are missing.");
+
     setBusy(true);
     setMessage("Signing in…");
-    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    setShowResend(false);
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password
+    });
+
     setBusy(false);
-    setMessage(error ? error.message : "Signed in successfully.");
+
+    if (error) {
+      const lower = error.message.toLowerCase();
+      if (lower.includes("email") && (lower.includes("confirm") || lower.includes("verified"))) {
+        setMessage("Your email address has not been verified yet. Resend the verification email below.");
+        setShowResend(true);
+      } else {
+        setMessage(error.message);
+      }
+      return;
+    }
+
+    if (data.session?.user) {
+      setUserEmail(data.session.user.email ?? email.trim());
+      setMessage("Signed in successfully. Redirecting…");
+      router.replace("/account");
+      router.refresh();
+    }
   }
 
   async function register(e: FormEvent) {
@@ -51,16 +95,25 @@ export default function LoginPage() {
     if (password !== confirmPassword) return setMessage("Passwords do not match.");
 
     setBusy(true);
+    setShowResend(false);
     setMessage("Checking registration security…");
+
     try {
       const response = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim(), password, displayName: displayName.trim() })
+        body: JSON.stringify({
+          email: email.trim(),
+          password,
+          displayName: displayName.trim()
+        })
       });
+
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error || "Registration failed.");
-      setMessage(body.message || "Registration submitted. Check your email to verify your account before signing in.");
+
+      setMessage(body.message || "Account created. Check your email to verify it before signing in.");
+      setShowResend(true);
       setPassword("");
       setConfirmPassword("");
     } catch (error) {
@@ -70,11 +123,43 @@ export default function LoginPage() {
     }
   }
 
+  async function resendVerification() {
+    const targetEmail = email.trim();
+    if (!targetEmail) {
+      setMessage("Enter your email address first.");
+      return;
+    }
+
+    setResendBusy(true);
+    setMessage("Sending verification email…");
+
+    try {
+      const response = await fetch("/api/auth/resend-verification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: targetEmail })
+      });
+
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || "Could not resend verification email.");
+
+      setMessage(body.message || "Verification email sent. Check your inbox and spam/junk folder.");
+      setShowResend(true);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not resend verification email.");
+    } finally {
+      setResendBusy(false);
+    }
+  }
+
   async function forgot(e: FormEvent) {
     e.preventDefault();
     if (!supabase) return setMessage("Supabase environment variables are missing.");
+
     setBusy(true);
-    const redirectTo = `${window.location.origin}/login`;
+    const configured = (process.env.NEXT_PUBLIC_SITE_URL || "").replace(/\/+$/, "");
+    const redirectTo = `${configured || window.location.origin}/login`;
+
     const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo });
     setBusy(false);
     setMessage(error ? error.message : "If an account exists for that email, a password reset link has been sent.");
@@ -85,13 +170,18 @@ export default function LoginPage() {
     if (!supabase) return setMessage("Supabase environment variables are missing.");
     if (password.length < 8) return setMessage("Use a password with at least 8 characters.");
     if (password !== confirmPassword) return setMessage("Passwords do not match.");
+
     setBusy(true);
     const { error } = await supabase.auth.updateUser({ password });
     setBusy(false);
+
     if (error) return setMessage(error.message);
-    setMessage("Password updated successfully. You can continue using your account.");
+
+    setMessage("Password updated successfully. Redirecting to your account…");
     setPassword("");
     setConfirmPassword("");
+    router.replace("/account");
+    router.refresh();
   }
 
   async function logout() {
@@ -111,7 +201,10 @@ export default function LoginPage() {
         <div className="signedInMark"><MailCheck size={28}/></div>
         <h3>Signed in</h3>
         <p className="muted">{userEmail}</p>
-        <button className="primaryBtn" onClick={logout}><LogOut size={16}/> Sign out</button>
+        <button className="primaryBtn" onClick={() => { router.push("/account"); router.refresh(); }}>
+          <UserPlus size={16}/> Go to My Account
+        </button>
+        <button className="secondaryBtn" onClick={logout}><LogOut size={16}/> Sign out</button>
       </> : <>
         {mode !== "reset" && <div className="authTabs">
           <button className={mode === "login" ? "active" : ""} type="button" onClick={() => switchMode("login")}>Login</button>
@@ -134,6 +227,12 @@ export default function LoginPage() {
           <button className="primaryBtn" disabled={busy} type="submit"><UserPlus size={16}/> {busy ? "Creating account…" : "Create account"}</button>
         </form>}
 
+        {(showResend || (mode === "login" && message.toLowerCase().includes("verified"))) && (
+          <button className="secondaryBtn" type="button" disabled={resendBusy || !email.trim()} onClick={resendVerification}>
+            <RefreshCw size={15}/> {resendBusy ? "Sending…" : "Resend verification email"}
+          </button>
+        )}
+
         {mode === "forgot" && <form onSubmit={forgot}>
           <div className="authIcon"><KeyRound size={25}/></div>
           <p className="muted authHelp">Enter your account email and we’ll send a secure password-reset link.</p>
@@ -148,6 +247,7 @@ export default function LoginPage() {
           <button className="primaryBtn" disabled={busy} type="submit"><KeyRound size={16}/> {busy ? "Updating…" : "Update password"}</button>
         </form>}
       </>}
+
       {message && <p className="formMessage" aria-live="polite">{message}</p>}
     </div>
   </div>;
