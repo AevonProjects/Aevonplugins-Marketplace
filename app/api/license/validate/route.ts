@@ -10,6 +10,7 @@ const PRODUCTS: Record<string, string> = {
   alicense: "ALicense",
   adiscordall: "ADiscordALL",
   ateam: "ATeam",
+  arankup: "ARankup",
 };
 
 function fail(message: string, status = 403) {
